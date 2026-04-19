@@ -38,7 +38,8 @@ export class UsersService {
 
   async updatePreferences(userId: string, prefs: Partial<User['preferences']>): Promise<User> {
     const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new Error('User not found');
     user.preferences = { ...user.preferences, ...prefs };
-    return this.userRepo.save(user);
+    return this.userRepo.save(user) as Promise<User>;
   }
 }

@@ -76,10 +76,10 @@ Rules:
     // Minimal offline parse for local dev without API key
     return {
       title: text.replace(/^remind me (to )?/i, '').trim(),
-      scheduledAt: null,
+      scheduledAt: undefined,
       recurrence: 'none',
       category: 'personal',
-      notes: null,
+      notes: undefined,
     };
   }
 }

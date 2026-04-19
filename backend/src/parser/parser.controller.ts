@@ -15,7 +15,7 @@ export class ParserController {
   constructor(private readonly parserService: ParserService) {}
 
   @Post('text')
-  parseText(@Request() req, @Body() dto: ParseTextDto) {
+  parseText(@Request() req: { user: { timezone?: string } }, @Body() dto: ParseTextDto) {
     const tz = req.user.timezone ?? 'UTC';
     return this.parserService.parseNaturalLanguage(dto.text, tz);
   }

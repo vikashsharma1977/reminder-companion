@@ -16,39 +16,41 @@ import { RemindersService } from './reminders.service';
 import { CreateReminderDto } from './dto/create-reminder.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+type AuthReq = { user: { id: string } };
+
 @Controller('reminders')
 @UseGuards(JwtAuthGuard)
 export class RemindersController {
   constructor(private readonly remindersService: RemindersService) {}
 
   @Post()
-  create(@Request() req, @Body() dto: CreateReminderDto) {
+  create(@Request() req: AuthReq, @Body() dto: CreateReminderDto) {
     return this.remindersService.create(req.user.id, dto);
   }
 
   @Get()
-  findAll(@Request() req) {
+  findAll(@Request() req: AuthReq) {
     return this.remindersService.findAllForUser(req.user.id);
   }
 
   @Get('today')
-  getToday(@Request() req) {
+  getToday(@Request() req: AuthReq) {
     return this.remindersService.getTodaysReminders(req.user.id);
   }
 
   @Get('missed')
-  getMissed(@Request() req) {
+  getMissed(@Request() req: AuthReq) {
     return this.remindersService.getFrequentlyMissed(req.user.id);
   }
 
   @Get(':id')
-  findOne(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  findOne(@Request() req: AuthReq, @Param('id', ParseUUIDPipe) id: string) {
     return this.remindersService.findOne(req.user.id, id);
   }
 
   @Patch(':id')
   update(
-    @Request() req,
+    @Request() req: AuthReq,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: Partial<CreateReminderDto>,
   ) {
@@ -57,13 +59,13 @@ export class RemindersController {
 
   @Patch(':id/complete')
   @HttpCode(HttpStatus.OK)
-  complete(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  complete(@Request() req: AuthReq, @Param('id', ParseUUIDPipe) id: string) {
     return this.remindersService.markCompleted(req.user.id, id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Request() req, @Param('id', ParseUUIDPipe) id: string) {
+  remove(@Request() req: AuthReq, @Param('id', ParseUUIDPipe) id: string) {
     return this.remindersService.remove(req.user.id, id);
   }
 }

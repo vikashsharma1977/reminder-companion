@@ -13,9 +13,9 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <StatusBar style="auto" />
       <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="auth/login" options={{ title: 'Sign In', headerShown: false }} />
-        <Stack.Screen name="auth/register" options={{ title: 'Create Account', headerShown: false }} />
+        <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="reminder/new" options={{ title: 'New Reminder', presentation: 'modal' }} />
         <Stack.Screen name="reminder/[id]" options={{ title: 'Reminder', presentation: 'modal' }} />
       </Stack>

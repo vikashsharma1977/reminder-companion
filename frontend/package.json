@@ -1,0 +1,30 @@
+{
+  "name": "reminder-companion",
+  "version": "1.0.0",
+  "description": "AI-powered reminder companion mobile app",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "jest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@react-navigation/bottom-tabs": "^7.15.9",
+    "@react-navigation/native": "^7.2.2",
+    "@tanstack/react-query": "^5.99.1",
+    "axios": "^1.15.0",
+    "expo": "^55.0.15",
+    "expo-constants": "^55.0.14",
+    "expo-router": "^55.0.12",
+    "expo-status-bar": "^55.0.5",
+    "react": "^19.2.5",
+    "react-native": "^0.85.1",
+    "react-native-safe-area-context": "^5.7.0",
+    "react-native-screens": "^4.24.0"
+  }
+}

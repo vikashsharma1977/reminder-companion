@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Reminder Companion",
+    "slug": "reminder-companion",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "remindercompanion",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#6366f1"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.remindercompanion.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Used for voice reminders",
+        "NSCameraUsageDescription": "Used to scan prescriptions and documents",
+        "NSPhotoLibraryUsageDescription": "Used to import images for OCR",
+        "NSLocationWhenInUseUsageDescription": "Used for location-based reminders",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Used to trigger reminders when you arrive at a location"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#6366f1"
+      },
+      "package": "com.remindercompanion.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ]
+    },
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

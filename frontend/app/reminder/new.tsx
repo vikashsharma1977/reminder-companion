@@ -3,15 +3,51 @@ import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
   StyleSheet,
   ScrollView,
-  ActivityIndicator,
-  Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { parserApi, remindersApi } from '../../src/api/client';
+
+function WebButton({
+  onPress,
+  disabled,
+  loading,
+  label,
+  secondary,
+}: {
+  onPress: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  label: string;
+  secondary?: boolean;
+}) {
+  if (Platform.OS === 'web') {
+    return (
+      <button
+        onClick={onPress}
+        disabled={disabled || loading}
+        style={{
+          background: secondary ? 'transparent' : disabled ? '#a5b4fc' : '#6366f1',
+          color: secondary ? '#6366f1' : '#fff',
+          border: secondary ? 'none' : 'none',
+          borderRadius: 12,
+          padding: secondary ? '12px' : '16px',
+          fontSize: 16,
+          fontWeight: '700',
+          cursor: disabled || loading ? 'not-allowed' : 'pointer',
+          width: '100%',
+          marginBottom: 12,
+        } as any}
+      >
+        {loading ? 'Please wait...' : label}
+      </button>
+    );
+  }
+  return null; // native handled separately
+}
 
 export default function NewReminderScreen() {
   const router = useRouter();
@@ -20,14 +56,18 @@ export default function NewReminderScreen() {
   const [inputText, setInputText] = useState('');
   const [parsed, setParsed] = useState<any>(null);
   const [step, setStep] = useState<'input' | 'preview'>('input');
+  const [error, setError] = useState('');
 
   const parseMutation = useMutation({
     mutationFn: (text: string) => parserApi.parseText(text).then((r) => r.data),
     onSuccess: (data) => {
       setParsed(data);
       setStep('preview');
+      setError('');
     },
-    onError: () => Alert.alert('Error', 'Could not parse reminder. Try again.'),
+    onError: (err: any) => {
+      setError(err?.response?.data?.message ?? 'Could not parse. Try again.');
+    },
   });
 
   const saveMutation = useMutation({
@@ -36,23 +76,27 @@ export default function NewReminderScreen() {
       qc.invalidateQueries({ queryKey: ['reminders'] });
       router.back();
     },
-    onError: () => Alert.alert('Error', 'Could not save reminder.'),
+    onError: (err: any) => {
+      setError(err?.response?.data?.message ?? 'Could not save reminder.');
+    },
   });
 
   const handleParse = () => {
     if (!inputText.trim()) return;
+    setError('');
     parseMutation.mutate(inputText.trim());
   };
 
   const handleConfirm = () => {
     if (!parsed) return;
+    setError('');
     saveMutation.mutate({
       title: parsed.title,
-      scheduledAt: parsed.scheduledAt,
-      recurrence: parsed.recurrence,
-      recurrenceConfig: parsed.recurrenceConfig,
-      category: parsed.category,
-      notes: parsed.notes,
+      scheduledAt: parsed.scheduledAt ?? undefined,
+      recurrence: parsed.recurrence ?? 'none',
+      recurrenceConfig: parsed.recurrenceConfig ?? undefined,
+      category: parsed.category ?? 'personal',
+      notes: parsed.notes ?? undefined,
       sourceType: 'text',
     });
   };
@@ -68,21 +112,18 @@ export default function NewReminderScreen() {
             style={styles.input}
             placeholder='e.g. "Take medicine after dinner for 5 days"'
             value={inputText}
-            onChangeText={setInputText}
+            onChangeText={(v) => { setInputText(v); setError(''); }}
             multiline
             autoFocus
+            onSubmitEditing={handleParse}
           />
-          <TouchableOpacity
-            style={[styles.btn, !inputText.trim() && styles.btnDisabled]}
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
+          <WebButton
             onPress={handleParse}
-            disabled={!inputText.trim() || parseMutation.isPending}
-          >
-            {parseMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.btnText}>Parse →</Text>
-            )}
-          </TouchableOpacity>
+            disabled={!inputText.trim()}
+            loading={parseMutation.isPending}
+            label="Parse →"
+          />
         </>
       )}
 
@@ -113,17 +154,18 @@ export default function NewReminderScreen() {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.btn} onPress={handleConfirm} disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.btnText}>Confirm & Save</Text>
-            )}
-          </TouchableOpacity>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          <TouchableOpacity style={styles.backBtn} onPress={() => setStep('input')}>
-            <Text style={styles.backBtnText}>Edit</Text>
-          </TouchableOpacity>
+          <WebButton
+            onPress={handleConfirm}
+            loading={saveMutation.isPending}
+            label="Confirm & Save"
+          />
+          <WebButton
+            onPress={() => { setStep('input'); setError(''); }}
+            label="← Edit"
+            secondary
+          />
         </>
       )}
     </ScrollView>
@@ -146,15 +188,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 20,
   },
-  btn: {
-    backgroundColor: '#6366f1',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  btnDisabled: { opacity: 0.5 },
-  btnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  errorText: { color: '#ef4444', fontSize: 13, marginBottom: 8, textAlign: 'center' },
   previewCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -163,9 +197,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  previewRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  previewRow: {
+    flexDirection: 'row',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
   previewKey: { width: 100, color: '#6b7280', fontWeight: '600' },
   previewValue: { flex: 1, color: '#111827' },
-  backBtn: { alignItems: 'center', padding: 12 },
-  backBtnText: { color: '#6366f1', fontWeight: '600' },
 });

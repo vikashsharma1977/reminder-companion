@@ -73,9 +73,13 @@ export class RemindersService {
     return this.reminderRepo
       .createQueryBuilder('r')
       .where('r.userId = :userId', { userId })
-      .andWhere('r.scheduledAt BETWEEN :start AND :end', { start, end })
       .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
-      .orderBy('r.scheduledAt', 'ASC')
+      .andWhere(
+        // Show reminders scheduled for today OR active reminders with no scheduled time (anytime reminders)
+        '(r.scheduledAt BETWEEN :start AND :end OR r.scheduledAt IS NULL)',
+        { start, end },
+      )
+      .orderBy('r.scheduledAt', 'ASC', 'NULLS LAST')
       .getMany();
   }
 

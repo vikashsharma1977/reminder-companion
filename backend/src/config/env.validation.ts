@@ -12,7 +12,7 @@ export const envValidationSchema = Joi.object({
   ALLOWED_ORIGINS: Joi.string().default('http://localhost:8081'),
 
   // Railway provides DATABASE_URL; individual vars are used for local dev
-  DATABASE_URL: Joi.string().uri().optional(),
+  DATABASE_URL: Joi.string().optional().allow(''),
   DB_HOST: Joi.string().default('localhost'),
   DB_PORT: Joi.number().default(5432),
   DB_USER: Joi.string().optional(),
@@ -20,7 +20,7 @@ export const envValidationSchema = Joi.object({
   DB_NAME: Joi.string().optional(),
 
   // Railway provides REDIS_URL; individual vars are used for local dev
-  REDIS_URL: Joi.string().uri().optional(),
+  REDIS_URL: Joi.string().optional().allow(''),
   REDIS_HOST: Joi.string().default('localhost'),
   REDIS_PORT: Joi.number().default(6379),
 

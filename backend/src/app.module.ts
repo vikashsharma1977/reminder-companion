@@ -26,7 +26,7 @@ import { envValidationSchema } from './config/env.validation';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => {
-        const databaseUrl = config.get<string>('DATABASE_URL');
+        const databaseUrl = config.get<string>('DATABASE_URL') || '';
         const base = {
           type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
@@ -51,7 +51,7 @@ import { envValidationSchema } from './config/env.validation';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const redisUrl = config.get<string>('REDIS_URL');
+        const redisUrl = config.get<string>('REDIS_URL') || '';
         return redisUrl
           ? { url: redisUrl }
           : {

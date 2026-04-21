@@ -18,19 +18,21 @@ export class ParserService {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
 
     if (!apiKey) {
-      return this.regexParse(text);
+      return this.regexParse(text, userTimezone);
     }
 
+    const localNow = new Date().toLocaleString('en-US', { timeZone: userTimezone });
     const prompt = `You are a reminder parsing assistant. Parse the user's reminder request into structured JSON.
 
 User timezone: ${userTimezone}
 Current UTC time: ${new Date().toISOString()}
+Current local time for user: ${localNow}
 User input: "${text}"
 
 Return ONLY valid JSON (no markdown, no explanation) in this shape:
 {
   "title": "short action title",
-  "scheduledAt": "ISO8601 datetime or null",
+  "scheduledAt": "ISO8601 datetime in UTC or null",
   "recurrence": "none|daily|weekly|custom",
   "recurrenceConfig": { "durationDays": number } or null,
   "category": "work|personal|health|other",
@@ -38,9 +40,10 @@ Return ONLY valid JSON (no markdown, no explanation) in this shape:
 }
 
 Rules:
-- "after dinner" → 20:00 local time
-- "morning" → 08:00 local time
-- "tonight" → 20:00 local time
+- Convert all times to UTC before returning scheduledAt
+- "after dinner" → 20:00 local time → convert to UTC
+- "morning" → 08:00 local time → convert to UTC
+- "in X minutes/hours" → current UTC + X minutes/hours
 - For recurrence, set durationDays if mentioned ("for 5 days")`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -58,9 +61,8 @@ Rules:
     });
 
     if (!response.ok) {
-      // API key invalid / no credits — fall back to regex parser
       console.warn('[Parser] Anthropic API failed, using regex fallback');
-      return this.regexParse(text);
+      return this.regexParse(text, userTimezone);
     }
 
     const data = await response.json() as any;
@@ -69,97 +71,146 @@ Rules:
     try {
       return JSON.parse(rawText) as ParsedReminder;
     } catch {
-      return this.regexParse(text);
+      return this.regexParse(text, userTimezone);
     }
   }
 
-  // Regex-based offline parser — covers the most common natural language patterns
-  private regexParse(text: string): ParsedReminder {
-    const lower = text.toLowerCase();
-    const now = new Date();
+  /**
+   * Returns how many minutes the timezone is ahead of UTC.
+   * Uses sv-SE locale which gives "YYYY-MM-DD HH:MM:SS" — unambiguously parseable.
+   * IST (+5:30) → +330, EST (-5) → -300
+   */
+  private getTzOffsetMs(timezone: string): number {
+    const ref = new Date();
+    const toMs = (s: string) => new Date(s + 'Z').getTime();
+    const tzMs  = toMs(ref.toLocaleString('sv-SE', { timeZone: timezone }).replace(' ', 'T'));
+    const utcMs = toMs(ref.toLocaleString('sv-SE', { timeZone: 'UTC' }).replace(' ', 'T'));
+    return tzMs - utcMs; // positive → ahead of UTC
+  }
 
-    // ── Clean title ───────────────────────────────────────────
-    let title = text
-      .replace(/^remind me (to )?/i, '')
-      .replace(/\b(every (day|daily|monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/gi, '')
+  /**
+   * Given a local date string "YYYY-MM-DD" (in the user's timezone) and an hour/minute,
+   * returns the corresponding UTC ISO string.
+   */
+  private localToUTC(localDate: string, hour: number, minute: number, offsetMs: number): string {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Treat localDate + time as UTC, then subtract the offset to get real UTC
+    const fakeUTC = new Date(`${localDate}T${pad(hour)}:${pad(minute)}:00.000Z`);
+    return new Date(fakeUTC.getTime() - offsetMs).toISOString();
+  }
+
+  private regexParse(text: string, userTimezone = 'UTC'): ParsedReminder {
+    const lower = text.toLowerCase();
+
+    // Offset of user's timezone from UTC, in milliseconds
+    const offsetMs = this.getTzOffsetMs(userTimezone);
+
+    // Current date string in user's local timezone "YYYY-MM-DD"
+    const nowInTz = new Date(Date.now() + offsetMs);
+    const localDateStr = nowInTz.toISOString().slice(0, 10);   // "2026-04-19"
+    const localDayOfWeek = nowInTz.getUTCDay();                // 0=Sun…6=Sat (local weekday)
+
+    // ── Clean title ──────────────────────────────────────────────────────
+    const title = text
+      .replace(/^(remind me (to )?|set (a )?reminder (to )?)/i, '')
+      .replace(/\bin\s+(?:a|an)\s+hour\b/gi, '')
+      .replace(/\bin\s+half\s+an?\s+hour\b/gi, '')
+      .replace(/\bin\s+\d+\s*(?:min(?:utes?)?|hours?)\b/gi, '')
+      .replace(/\bevery\s+(?:day|daily|week|weekly|morning|evening|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
+      .replace(/\bevery\b/gi, '')
       .replace(/\b(today|tomorrow|tonight)\b/gi, '')
-      .replace(/\bat\s+\d{1,2}(:\d{2})?\s*(am|pm)?\b/gi, '')
-      .replace(/\bafter (dinner|lunch|breakfast)\b/gi, '')
-      .replace(/\b(in the )?(morning|evening|afternoon|night)\b/gi, '')
-      .replace(/\bfor \d+ days?\b/gi, '')
+      .replace(/\bat\s+\d{1,2}(?::\d{2}|\d{2})?\s*(?:am|pm)?\b/gi, '')
+      .replace(/\bafter\s+(?:dinner|lunch|breakfast)\b/gi, '')
+      .replace(/\b(?:in the\s+)?(?:morning|evening|afternoon|night)\b/gi, '')
+      .replace(/\bfor\s+\d+\s+days?\b/gi, '')
       .replace(/\bfrom today\b/gi, '')
+      .replace(/\bnext\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
       .trim()
       .replace(/\s+/g, ' ');
 
-    // ── Detect date ───────────────────────────────────────────
-    const date = new Date(now);
-    if (/\btomorrow\b/.test(lower)) {
-      date.setDate(date.getDate() + 1);
-    }
-    // "next monday" style
-    const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-    const nextDayMatch = lower.match(/\b(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
-    if (nextDayMatch) {
-      const targetDay = dayNames.indexOf(nextDayMatch[2]);
-      const daysAhead = (targetDay - date.getDay() + 7) % 7 || 7;
-      date.setDate(date.getDate() + daysAhead);
+    // ── Relative time ("in 5 minutes", "in an hour", "in half an hour") ──
+    const inMinMatch  = lower.match(/\bin\s+(\d+)\s*min(?:utes?)?\b/);
+    const inHrMatch   = lower.match(/\bin\s+(\d+)\s*hours?\b/);
+    const inAnHr      = /\bin\s+(?:a|an)\s+hour\b/.test(lower);
+    const inHalfHr    = /\bin\s+half\s+an?\s+hour\b/.test(lower);
+
+    if (inMinMatch || inHrMatch || inAnHr || inHalfHr) {
+      let addMs = 0;
+      if (inMinMatch)   addMs = parseInt(inMinMatch[1]) * 60_000;
+      else if (inHrMatch) addMs = parseInt(inHrMatch[1]) * 3_600_000;
+      else if (inAnHr)  addMs = 3_600_000;
+      else              addMs = 1_800_000;
+
+      return {
+        title: title || text.trim(),
+        scheduledAt: new Date(Date.now() + addMs).toISOString(),
+        recurrence: 'none',
+        category: this.detectCategory(lower),
+      };
     }
 
-    // ── Detect time ───────────────────────────────────────────
-    let hour = 9; // default morning
+    // ── Date offset (tomorrow, next monday…) ─────────────────────────────
+    let dateParts = localDateStr.split('-').map(Number); // [year, month, day]
+    const localDateObj = new Date(Date.UTC(dateParts[0], dateParts[1] - 1, dateParts[2]));
+
+    if (/\btomorrow\b/.test(lower)) {
+      localDateObj.setUTCDate(localDateObj.getUTCDate() + 1);
+    }
+
+    const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const wdMatch = lower.match(/\b(?:next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/);
+    if (wdMatch) {
+      const target = DAY_NAMES.indexOf(wdMatch[1]);
+      const ahead = (target - localDayOfWeek + 7) % 7 || 7;
+      localDateObj.setUTCDate(localDateObj.getUTCDate() + ahead);
+    }
+
+    const workDateStr = localDateObj.toISOString().slice(0, 10); // "YYYY-MM-DD" (local)
+
+    // ── Time ─────────────────────────────────────────────────────────────
+    let hour = 9;
     let minute = 0;
     let timeSet = false;
 
-    const timeMatch = lower.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b/);
-    if (timeMatch) {
-      hour = parseInt(timeMatch[1]);
-      minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-      const period = timeMatch[3];
+    // Matches: "at 10:45pm", "at 10:45", "at 1045pm", "at 1045", "at 9pm", "at 9 pm"
+    const atMatch = lower.match(/\bat\s+(\d{1,2})(?::(\d{2})|(\d{2}))?\s*(am|pm)?\b/);
+    if (atMatch) {
+      hour   = parseInt(atMatch[1]);
+      // Group 2: colon-style "10:45" · Group 3: run-on "1045"
+      minute = atMatch[2] ? parseInt(atMatch[2]) : atMatch[3] ? parseInt(atMatch[3]) : 0;
+      const period = atMatch[4];
       if (period === 'pm' && hour < 12) hour += 12;
       if (period === 'am' && hour === 12) hour = 0;
+      // No explicit am/pm: treat 1–6 as PM (e.g. "at 3" → 3 PM)
+      if (!period && hour >= 1 && hour <= 6) hour += 12;
       timeSet = true;
     } else if (/after dinner|evening|tonight/.test(lower)) {
       hour = 20; timeSet = true;
     } else if (/after lunch|afternoon/.test(lower)) {
       hour = 13; timeSet = true;
     } else if (/after breakfast|morning/.test(lower)) {
-      hour = 8; timeSet = true;
+      hour = 8;  timeSet = true;
     } else if (/\bnight\b/.test(lower)) {
       hour = 21; timeSet = true;
     }
 
-    if (timeSet || /today|tomorrow|next/.test(lower) || nextDayMatch) {
-      date.setHours(hour, minute, 0, 0);
-    }
-
-    const scheduledAt = timeSet || /today|tomorrow/.test(lower) || nextDayMatch
-      ? date.toISOString()
+    const hasDateClue = timeSet || /\b(today|tomorrow)\b/.test(lower) || !!wdMatch;
+    const scheduledAt = hasDateClue
+      ? this.localToUTC(workDateStr, hour, minute, offsetMs)
       : undefined;
 
-    // ── Detect recurrence ─────────────────────────────────────
+    // ── Recurrence ────────────────────────────────────────────────────────
     let recurrence = 'none';
     let recurrenceConfig: object | undefined;
 
-    if (/every day|daily/.test(lower)) {
-      recurrence = 'daily';
-    } else if (/every week|weekly/.test(lower)) {
-      recurrence = 'weekly';
-    } else if (/every (monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(lower)) {
-      recurrence = 'weekly';
-    }
+    if (/every\s*day|daily/.test(lower))       recurrence = 'daily';
+    else if (/every\s*week|weekly/.test(lower)) recurrence = 'weekly';
+    else if (/every\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/.test(lower)) recurrence = 'weekly';
 
-    const durationMatch = lower.match(/for (\d+) days?/);
-    if (durationMatch) {
-      recurrenceConfig = { durationDays: parseInt(durationMatch[1]) };
+    const durMatch = lower.match(/for\s+(\d+)\s+days?/);
+    if (durMatch) {
+      recurrenceConfig = { durationDays: parseInt(durMatch[1]) };
       if (recurrence === 'none') recurrence = 'daily';
-    }
-
-    // ── Detect category ───────────────────────────────────────
-    let category = 'personal';
-    if (/medicine|doctor|hospital|health|gym|exercise|workout|pill|tablet/.test(lower)) {
-      category = 'health';
-    } else if (/meeting|standup|call|email|work|office|project|deadline|client/.test(lower)) {
-      category = 'work';
     }
 
     return {
@@ -167,7 +218,13 @@ Rules:
       scheduledAt,
       recurrence,
       recurrenceConfig,
-      category,
+      category: this.detectCategory(lower),
     };
+  }
+
+  private detectCategory(lower: string): string {
+    if (/medicine|doctor|hospital|health|gym|exercise|workout|pill|tablet|run|walk/.test(lower)) return 'health';
+    if (/meeting|standup|call|email|work|office|project|deadline|client|interview|report/.test(lower)) return 'work';
+    return 'personal';
   }
 }

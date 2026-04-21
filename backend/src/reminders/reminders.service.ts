@@ -3,8 +3,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { Reminder, ReminderStatus } from './reminder.entity';
+import { Reminder, ReminderStatus, RecurrenceType } from './reminder.entity';
 import { CreateReminderDto } from './dto/create-reminder.dto';
+
+export const SNOOZE_MINUTES = 10;
 
 @Injectable()
 export class RemindersService {
@@ -50,13 +52,33 @@ export class RemindersService {
 
   async markCompleted(userId: string, id: string): Promise<Reminder> {
     const reminder = await this.findOne(userId, id);
-    reminder.status = ReminderStatus.COMPLETED;
+    const isRecurring = reminder.recurrence !== RecurrenceType.NONE;
+    if (isRecurring) {
+      // For recurring reminders, just stamp lastFiredAt — the processor already
+      // moved scheduledAt to the next occurrence, so it won't show in today's list.
+      reminder.lastFiredAt = new Date();
+    } else {
+      reminder.status = ReminderStatus.COMPLETED;
+    }
     return this.reminderRepo.save(reminder);
   }
 
   async markMissed(id: string): Promise<void> {
     await this.reminderRepo.increment({ id }, 'missedCount', 1);
     await this.reminderRepo.update(id, { lastFiredAt: new Date() });
+  }
+
+  async snooze(userId: string, id: string, minutes = SNOOZE_MINUTES): Promise<Reminder> {
+    const reminder = await this.findOne(userId, id);
+    const newTime = new Date(Date.now() + minutes * 60 * 1000);
+    reminder.scheduledAt = newTime;
+    reminder.status = ReminderStatus.ACTIVE;
+    const saved = await this.reminderRepo.save(reminder);
+
+    const delay = newTime.getTime() - Date.now();
+    await this.reminderQueue.add('fire', { reminderId: saved.id }, { delay });
+
+    return saved;
   }
 
   async remove(userId: string, id: string): Promise<void> {
@@ -89,5 +111,17 @@ export class RemindersService {
       order: { missedCount: 'DESC' },
       take: 5,
     });
+  }
+
+  // Returns reminders that fired within the last 90 seconds — used by mobile polling
+  async getFiring(userId: string): Promise<Reminder[]> {
+    const cutoff = new Date(Date.now() - 90 * 1000);
+    return this.reminderRepo
+      .createQueryBuilder('r')
+      .where('r.userId = :userId', { userId })
+      .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
+      .andWhere('r.lastFiredAt IS NOT NULL')
+      .andWhere('r.lastFiredAt >= :cutoff', { cutoff })
+      .getMany();
   }
 }

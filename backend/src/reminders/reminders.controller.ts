@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   ParseUUIDPipe,
@@ -43,6 +44,11 @@ export class RemindersController {
     return this.remindersService.getFrequentlyMissed(req.user.id);
   }
 
+  @Get('firing')
+  getFiring(@Request() req: AuthReq) {
+    return this.remindersService.getFiring(req.user.id);
+  }
+
   @Get(':id')
   findOne(@Request() req: AuthReq, @Param('id', ParseUUIDPipe) id: string) {
     return this.remindersService.findOne(req.user.id, id);
@@ -61,6 +67,17 @@ export class RemindersController {
   @HttpCode(HttpStatus.OK)
   complete(@Request() req: AuthReq, @Param('id', ParseUUIDPipe) id: string) {
     return this.remindersService.markCompleted(req.user.id, id);
+  }
+
+  @Patch(':id/snooze')
+  @HttpCode(HttpStatus.OK)
+  snooze(
+    @Request() req: AuthReq,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('minutes') minutes?: string,
+  ) {
+    const mins = minutes ? Math.max(1, Math.min(120, parseInt(minutes, 10))) : undefined;
+    return this.remindersService.snooze(req.user.id, id, mins);
   }
 
   @Delete(':id')

@@ -11,9 +11,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly usersService: UsersService,
   ) {
     super({
+      // #7 — Bearer header only; query-param token extraction removed
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: config.get<string>('JWT_SECRET', 'dev-secret-change-in-prod'),
+      // #1 — No fallback default; env validation guarantees this is set
+      secretOrKey: config.get<string>('JWT_SECRET')!,
+      passReqToCallback: false,
     });
   }
 

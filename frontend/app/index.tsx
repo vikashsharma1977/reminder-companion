@@ -1,15 +1,21 @@
 import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { View, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { tokenStore } from '../src/api/client';
 
 export default function Index() {
   const [destination, setDestination] = useState<string | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem('auth_token').then((token) => {
+    (async () => {
+      // Migrate: clear the old single-token key so stale sessions don't cause loops
+      const legacy = await AsyncStorage.getItem('auth_token');
+      if (legacy) await AsyncStorage.removeItem('auth_token');
+
+      const token = await tokenStore.getAccess();
       setDestination(token ? '/(tabs)' : '/auth/login');
-    });
+    })();
   }, []);
 
   if (!destination) {

@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -25,23 +25,25 @@ import { envValidationSchema } from './config/env.validation';
 
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
+      useFactory: (config: ConfigService): TypeOrmModuleOptions => {
         const databaseUrl = config.get<string>('DATABASE_URL');
-        return {
-          type: 'postgres',
-          ...(databaseUrl
-            ? { url: databaseUrl, ssl: { rejectUnauthorized: false } }
-            : {
-                host: config.get('DB_HOST'),
-                port: config.get<number>('DB_PORT'),
-                username: config.get('DB_USER'),
-                password: config.get('DB_PASS'),
-                database: config.get('DB_NAME'),
-              }),
+        const base = {
+          type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           synchronize: config.get('NODE_ENV') !== 'production',
           logging: config.get('NODE_ENV') === 'development',
+        };
+        if (databaseUrl) {
+          return { ...base, url: databaseUrl, ssl: { rejectUnauthorized: false } };
+        }
+        return {
+          ...base,
+          host: config.get<string>('DB_HOST'),
+          port: config.get<number>('DB_PORT'),
+          username: config.get<string>('DB_USER'),
+          password: config.get<string>('DB_PASS'),
+          database: config.get<string>('DB_NAME'),
         };
       },
     }),

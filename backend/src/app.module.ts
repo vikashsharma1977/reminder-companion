@@ -27,7 +27,12 @@ import { envValidationSchema } from './config/env.validation';
       inject: [ConfigService],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => {
         const databaseUrl = config.get<string>('DATABASE_URL') || '';
-        console.log(`[DB] DATABASE_URL present=${!!databaseUrl} len=${databaseUrl.length} host=${databaseUrl ? new URL(databaseUrl).hostname : 'none'}`);
+        let parsedHost = 'none';
+        if (databaseUrl) {
+          try { parsedHost = new URL(databaseUrl).hostname || 'EMPTY_HOST'; } catch { parsedHost = 'INVALID_URL'; }
+        }
+        console.log(`[DB] DATABASE_URL present=${!!databaseUrl} len=${databaseUrl.length} host=${parsedHost} prefix=${databaseUrl.slice(0, 14)}`);
+
         const base = {
           type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
@@ -35,8 +40,11 @@ import { envValidationSchema } from './config/env.validation';
           synchronize: config.get('NODE_ENV') !== 'production',
           logging: config.get('NODE_ENV') === 'development',
         };
-        if (databaseUrl) {
+        if (databaseUrl && parsedHost && parsedHost !== 'EMPTY_HOST' && parsedHost !== 'INVALID_URL') {
           return { ...base, url: databaseUrl, ssl: { rejectUnauthorized: false } };
+        }
+        if (databaseUrl) {
+          console.error(`[DB] DATABASE_URL is set but invalid (host="${parsedHost}") — falling back to individual DB_* vars`);
         }
         return {
           ...base,

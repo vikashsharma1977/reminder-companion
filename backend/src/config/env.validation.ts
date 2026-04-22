@@ -37,5 +37,5 @@ export const envValidationSchema = Joi.object({
   TWILIO_AUTH_TOKEN: Joi.string().optional(),
   TWILIO_PHONE_NUMBER: Joi.string().optional(),
 
-  ANTHROPIC_API_KEY: Joi.string().optional(),
+  ANTHROPIC_API_KEY: Joi.string().optional().allow(''),
 });

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { authApi, tokenStore, remindersApi } from '../api/client';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://reminder-companion-production.up.railway.app/api/v1';
 
 export interface FiredReminder {
   reminderId: string;

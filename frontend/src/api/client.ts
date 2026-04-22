@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { secureStorage } from '../storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://reminder-companion-production.up.railway.app/api/v1';
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

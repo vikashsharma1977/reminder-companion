@@ -27,6 +27,7 @@ import { envValidationSchema } from './config/env.validation';
       inject: [ConfigService],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => {
         const databaseUrl = config.get<string>('DATABASE_URL') || '';
+        console.log(`[DB] DATABASE_URL present=${!!databaseUrl} len=${databaseUrl.length} host=${databaseUrl ? new URL(databaseUrl).hostname : 'none'}`);
         const base = {
           type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],

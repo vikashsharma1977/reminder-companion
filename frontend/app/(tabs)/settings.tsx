@@ -422,7 +422,7 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <SettingsRow icon="code-slash-outline" label="Version" value="1.0.0 (MVP)" />
           <View style={styles.divider} />
-          <SettingsRow icon="server-outline" label="Backend" value="localhost:3001" />
+          <SettingsRow icon="server-outline" label="Backend" value="railway.app" />
         </View>
 
         {/* Account */}

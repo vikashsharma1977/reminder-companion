@@ -18,10 +18,10 @@ const SOUND_FILES: Record<string, any> = {
 };
 
 const VIBRATION_PATTERNS: Record<string, number[]> = {
-  chime:  [0, 400, 150, 400, 150, 400],
-  bell:   [0, 500, 150, 500, 150, 500],
-  gentle: [0, 500, 200, 500],
-  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300],
+  chime:  [0, 600, 150, 600, 150, 600, 150, 600],   // ~3s
+  bell:   [0, 600, 200, 600, 200, 600, 200, 600],   // ~3s
+  gentle: [0, 700, 300, 700, 300, 700],             // ~3s
+  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~3s
   none:   [],
 };
 
@@ -56,7 +56,6 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
     }
 
     if (prefs.sound && sound !== 'none' && Audio && SOUND_FILES[sound]) {
-      let soundObj: any;
       (async () => {
         try {
           await Audio.setAudioModeAsync({
@@ -66,10 +65,13 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
           });
           const { sound: s } = await Audio.Sound.createAsync(
             SOUND_FILES[sound],
-            { shouldPlay: true, volume: 1.0 },
+            { shouldPlay: true, volume: 1.0, isLooping: true },
           );
-          soundObj = s;
-          setTimeout(() => soundObj?.unloadAsync().catch(() => {}), 5000);
+          // Stop looping after 3s, then unload
+          setTimeout(async () => {
+            try { await s.setIsLoopingAsync(false); } catch {}
+            setTimeout(() => s.unloadAsync().catch(() => {}), 2000);
+          }, 3000);
         } catch {}
       })();
     }

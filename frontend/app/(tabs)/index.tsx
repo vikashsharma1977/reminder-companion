@@ -8,8 +8,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Animated,
+  Vibration,
 } from 'react-native';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -160,6 +161,14 @@ function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) 
 export default function TodayScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const [, setTick] = useState(0);
+  const prevMissedCountRef = useRef(0);
+
+  // Re-render every 30s so "missed" status stays current as time passes
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ['reminders', 'today'],
@@ -187,6 +196,14 @@ export default function TodayScreen() {
   const pendingReminders = activeReminders; // total not-done-today count
   // Order: upcoming → missed (draws attention) → done today
   const reminders = [...upcomingReminders, ...missedReminders, ...doneReminders];
+
+  // Vibrate once when missed reminders first appear (like a missed call alert)
+  useEffect(() => {
+    if (missedReminders.length > 0 && prevMissedCountRef.current === 0) {
+      Vibration.vibrate([0, 300, 100, 300, 100, 300]);
+    }
+    prevMissedCountRef.current = missedReminders.length;
+  }, [missedReminders.length]);
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (

@@ -46,11 +46,12 @@ function AppShell() {
           await Notifications.setNotificationChannelAsync('reminders', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 400, 150, 400, 150, 400],
+            vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600],
             lightColor: '#6C5CE7',
             enableLights: true,
             enableVibrate: true,
             showBadge: true,
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           });
         }
 

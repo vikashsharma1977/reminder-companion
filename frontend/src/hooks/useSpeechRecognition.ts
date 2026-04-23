@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform, PermissionsAndroid } from 'react-native';
+import { Platform } from 'react-native';
 
 interface Options {
   onInterim?: (text: string) => void;
@@ -7,9 +7,16 @@ interface Options {
   onError?: (msg: string) => void;
 }
 
-// ── Native voice module (loaded only on iOS/Android) ─────────────────────────
+// ── Android: expo-intent-launcher (no native module, uses OS dialog) ──────────
+// Loaded lazily so web/iOS bundles aren't affected.
+let IntentLauncher: any = null;
+if (Platform.OS === 'android') {
+  try { IntentLauncher = require('expo-intent-launcher'); } catch {}
+}
+
+// ── iOS: @react-native-voice/voice (bridge module) ────────────────────────────
 let Voice: any = null;
-if (Platform.OS !== 'web') {
+if (Platform.OS === 'ios') {
   try { Voice = require('@react-native-voice/voice').default; } catch {}
 }
 
@@ -25,8 +32,8 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
   errorRef.current   = onError;
 
   // ── Web: Web Speech API ───────────────────────────────────────────────────
-  const recognitionRef  = useRef<any>(null);
-  const pendingInterim  = useRef('');
+  const recognitionRef = useRef<any>(null);
+  const pendingInterim = useRef('');
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -35,9 +42,9 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
 
     setSupported(true);
     const rec = new SR();
-    rec.continuous     = false;
-    rec.interimResults = true;
-    rec.lang           = 'en-US';
+    rec.continuous      = false;
+    rec.interimResults  = true;
+    rec.lang            = 'en-US';
     rec.maxAlternatives = 1;
 
     rec.onresult = (e: any) => {
@@ -72,9 +79,14 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
     recognitionRef.current = rec;
   }, []);
 
-  // ── Native: @react-native-voice/voice ────────────────────────────────────
+  // ── Android: setSupported based on IntentLauncher availability ────────────
   useEffect(() => {
-    if (Platform.OS === 'web' || !Voice) return;
+    if (Platform.OS === 'android') setSupported(!!IntentLauncher);
+  }, []);
+
+  // ── iOS: @react-native-voice/voice ────────────────────────────────────────
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !Voice) return;
 
     setSupported(true);
 
@@ -110,38 +122,65 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
   // ── Controls ──────────────────────────────────────────────────────────────
   const start = useCallback(async () => {
     if (listening) return;
+
     if (Platform.OS === 'web') {
       recognitionRef.current?.start();
       setListening(true);
-    } else {
-      try {
-        if (Platform.OS === 'android') {
-          const granted = await PermissionsAndroid.request(
-            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-            {
-              title: 'Microphone Permission',
-              message: 'Reminder Companion needs microphone access for voice reminders.',
-              buttonPositive: 'Allow',
-            },
-          );
-          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-            errorRef.current?.('Microphone permission denied.');
-            return;
-          }
-        }
-        await Voice.start('en-US');
-      } catch (e: any) {
-        errorRef.current?.(`Could not start voice: ${e?.message ?? e}`);
+      return;
+    }
+
+    if (Platform.OS === 'android') {
+      if (!IntentLauncher) {
+        errorRef.current?.('Voice recognition not available on this device.');
+        return;
       }
+      try {
+        setListening(true);
+        // Uses the OS RecognizerIntent — no native module needed.
+        // Shows Google's voice input overlay; result comes back as extra.
+        const result = await IntentLauncher.startActivityAsync(
+          'android.speech.action.RECOGNIZE_SPEECH',
+          {
+            extra: {
+              'android.speech.extra.LANGUAGE_MODEL': 'free_form',
+              'android.speech.extra.LANGUAGE': 'en-US',
+              'android.speech.extra.PROMPT': 'Speak your reminder...',
+              'android.speech.extra.MAX_RESULTS': 1,
+            },
+          },
+        );
+        setListening(false);
+        // RESULT_OK = -1 on Android
+        if (result.resultCode === -1 && result.extra) {
+          const results: string[] = result.extra['android.speech.extra.RESULTS'] ?? [];
+          if (results.length > 0) finalRef.current(results[0]);
+        }
+      } catch (e: any) {
+        setListening(false);
+        errorRef.current?.(`Voice error: ${e?.message ?? e}`);
+      }
+      return;
+    }
+
+    // iOS — @react-native-voice/voice
+    if (!Voice) {
+      errorRef.current?.('Voice recognition not available on this device.');
+      return;
+    }
+    try {
+      await Voice.start('en-US');
+    } catch (e: any) {
+      errorRef.current?.(`Could not start voice: ${e?.message ?? e}`);
     }
   }, [listening]);
 
   const stop = useCallback(async () => {
     if (Platform.OS === 'web') {
       recognitionRef.current?.stop();
-    } else {
+    } else if (Platform.OS === 'ios' && Voice) {
       try { await Voice.stop(); } catch {}
     }
+    // Android: no explicit stop — the OS dialog handles it
     setListening(false);
   }, []);
 

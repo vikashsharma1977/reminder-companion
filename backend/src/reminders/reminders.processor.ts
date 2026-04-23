@@ -54,10 +54,21 @@ export class RemindersProcessor {
       try {
         const user = await this.usersService.findById(reminder.userId);
         if (user?.fcmToken) {
+          // Badge = number of active reminders for today (so user knows how many remain)
+          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+          const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
+          const pendingCount = await this.reminderRepo
+            .createQueryBuilder('r')
+            .where('r.userId = :userId', { userId: reminder.userId })
+            .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
+            .andWhere('(r.scheduledAt BETWEEN :start AND :end OR r.scheduledAt IS NULL)', { start: todayStart, end: todayEnd })
+            .getCount();
+
           await this.notificationsService.sendPush(user.fcmToken, {
             title: reminder.title,
             body: reminder.notes ?? 'Time for your reminder!',
             data: { reminderId: reminder.id },
+            badge: pendingCount,
           });
         }
       } catch (err: any) {

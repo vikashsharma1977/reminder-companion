@@ -2,7 +2,7 @@ import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect } from 'react';
-import { View, Platform } from 'react-native';
+import { View, Platform, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
@@ -35,11 +35,24 @@ function AppShell() {
     }
   }, []);
 
-  // Native: register for Expo push notifications and send token to backend
+  // Native: set up notification channel, register push token, clear badge on foreground
   useEffect(() => {
     if (Platform.OS === 'web') return;
     (async () => {
       try {
+        // Android: high-importance channel so reminders show as heads-up banners
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('reminders', {
+            name: 'Reminders',
+            importance: Notifications.AndroidImportance.MAX,
+            vibrationPattern: [0, 400, 150, 400, 150, 400],
+            lightColor: '#6C5CE7',
+            enableLights: true,
+            enableVibrate: true,
+            showBadge: true,
+          });
+        }
+
         const { status: existing } = await Notifications.getPermissionsAsync();
         let finalStatus = existing;
         if (existing !== 'granted') {
@@ -57,6 +70,16 @@ function AppShell() {
         await notificationsApi.registerPushToken(pushToken);
       } catch {}
     })();
+
+    // Clear badge whenever the app comes to the foreground
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        Notifications.setBadgeCountAsync(0).catch(() => {});
+      }
+    });
+    // Also clear on first mount
+    Notifications.setBadgeCountAsync(0).catch(() => {});
+    return () => sub.remove();
   }, []);
 
   useNotifications((reminder) => {

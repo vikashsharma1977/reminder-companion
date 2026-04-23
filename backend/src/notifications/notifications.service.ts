@@ -5,6 +5,7 @@ export interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, string>;
+  badge?: number;
 }
 
 @Injectable()
@@ -61,6 +62,11 @@ export class NotificationsService {
         data: payload.data ?? {},
         sound: 'default',
         priority: 'high',
+        channelId: 'reminders',
+        badge: payload.badge ?? 1,
+        // Android: keep notification visible until user explicitly dismisses
+        sticky: false,
+        ttl: 3600,
       }),
     });
     if (!response.ok) {

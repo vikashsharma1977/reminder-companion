@@ -7,7 +7,9 @@ import {
   Platform,
   TouchableOpacity,
   ScrollView,
+  Animated,
 } from 'react-native';
+import { useRef, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,12 +55,35 @@ function formatTime(iso: string) {
 
 function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) {
   const cfg = CATEGORY_CONFIG[item.category] ?? CATEGORY_CONFIG.other;
-  const isPast = item.scheduledAt && new Date(item.scheduledAt) < new Date();
+  const isPast = !!(item.scheduledAt && new Date(item.scheduledAt) < new Date());
   const doneToday = firedToday(item);
+  const isMissed = isPast && !doneToday;
+
+  // Pulse animation for missed reminders
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!isMissed) return;
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseOpacity, { toValue: 0.25, duration: 850, useNativeDriver: true }),
+        Animated.timing(pulseOpacity, { toValue: 1, duration: 850, useNativeDriver: true }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [isMissed]);
 
   return (
-    <View style={[styles.card, doneToday ? styles.cardDoneToday : isPast && styles.cardPast]}>
-      <View style={[styles.cardAccent, { backgroundColor: doneToday ? '#D1D5DB' : cfg.color }]} />
+    <View style={[styles.card, doneToday ? styles.cardDoneToday : isMissed ? styles.cardMissed : undefined]}>
+      <Animated.View
+        style={[
+          styles.cardAccent,
+          {
+            backgroundColor: doneToday ? '#D1D5DB' : isMissed ? '#EF4444' : cfg.color,
+            opacity: isMissed ? pulseOpacity : 1,
+          },
+        ]}
+      />
       <View style={styles.cardBody}>
         <View style={styles.cardRow}>
           <Text style={[styles.cardIcon, doneToday && styles.dimmed]}>{doneToday ? '✓' : cfg.icon}</Text>
@@ -73,15 +98,21 @@ function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) 
                   <Text style={[styles.timePillText, { color: '#9CA3AF' }]}>Done for today</Text>
                 </View>
               ) : item.scheduledAt ? (
-                <View style={styles.timePill}>
-                  <Ionicons name="time-outline" size={11} color={isPast ? '#EF4444' : '#6C5CE7'} />
-                  <Text style={[styles.timePillText, isPast && styles.timePillPast]}>
+                <View style={[styles.timePill, isMissed && styles.timePillMissed]}>
+                  <Ionicons name="time-outline" size={11} color={isMissed ? '#EF4444' : '#6C5CE7'} />
+                  <Text style={[styles.timePillText, isMissed && styles.timePillPast]}>
                     {formatTime(item.scheduledAt)}
                   </Text>
                 </View>
               ) : (
                 <View style={styles.timePill}>
                   <Text style={styles.timePillText}>Anytime</Text>
+                </View>
+              )}
+              {isMissed && (
+                <View style={styles.missedBadge}>
+                  <Ionicons name="alert-circle" size={10} color="#EF4444" />
+                  <Text style={styles.missedBadgeText}>MISSED</Text>
                 </View>
               )}
               {item.recurrence !== 'none' && (
@@ -144,8 +175,16 @@ export default function TodayScreen() {
 
   const allReminders = data ?? [];
   const doneReminders = allReminders.filter(firedToday);
-  const pendingReminders = allReminders.filter((r) => !firedToday(r));
-  const reminders = [...pendingReminders, ...doneReminders];
+  const activeReminders = allReminders.filter((r) => !firedToday(r));
+  const missedReminders = activeReminders.filter(
+    (r) => r.scheduledAt && new Date(r.scheduledAt) < new Date(),
+  );
+  const upcomingReminders = activeReminders.filter(
+    (r) => !r.scheduledAt || new Date(r.scheduledAt) >= new Date(),
+  );
+  const pendingReminders = activeReminders; // total not-done-today count
+  // Order: upcoming → missed (draws attention) → done today
+  const reminders = [...upcomingReminders, ...missedReminders, ...doneReminders];
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
@@ -281,6 +320,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardPast: { opacity: 0.65 },
+  cardMissed: { borderWidth: 1, borderColor: '#FECACA' },
   cardDoneToday: { opacity: 0.6 },
   cardTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
   dimmed: { opacity: 0.4 },
@@ -302,6 +342,19 @@ const styles = StyleSheet.create({
   },
   timePillText: { fontSize: 11, fontWeight: '600', color: '#6C5CE7' },
   timePillPast: { color: '#EF4444' },
+  timePillMissed: { backgroundColor: '#FEF2F2' },
+  missedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FEF2F2',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  missedBadgeText: { fontSize: 10, fontWeight: '800', color: '#EF4444', letterSpacing: 0.5 },
   recurrencePill: {
     flexDirection: 'row',
     alignItems: 'center',

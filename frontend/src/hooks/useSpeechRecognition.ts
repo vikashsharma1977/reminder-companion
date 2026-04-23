@@ -2,21 +2,31 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 
 interface Options {
-  onInterim?: (text: string) => void; // called with partial results while speaking
-  onFinal: (text: string) => void;    // called when speech ends with final transcript
+  onInterim?: (text: string) => void;
+  onFinal: (text: string) => void;
   onError?: (msg: string) => void;
+}
+
+// ── Native voice module (loaded only on iOS/Android) ─────────────────────────
+let Voice: any = null;
+if (Platform.OS !== 'web') {
+  try { Voice = require('@react-native-voice/voice').default; } catch {}
 }
 
 export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
-  const recognitionRef = useRef<any>(null);
-  const finalRef  = useRef(onFinal);
+
+  const finalRef   = useRef(onFinal);
   const interimRef = useRef(onInterim);
-  // Track last interim so we can commit it if recognition ends without a final result
-  const pendingInterim = useRef('');
-  finalRef.current  = onFinal;
+  const errorRef   = useRef(onError);
+  finalRef.current   = onFinal;
   interimRef.current = onInterim;
+  errorRef.current   = onError;
+
+  // ── Web: Web Speech API ───────────────────────────────────────────────────
+  const recognitionRef  = useRef<any>(null);
+  const pendingInterim  = useRef('');
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -25,9 +35,9 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
 
     setSupported(true);
     const rec = new SR();
-    rec.continuous = false;
+    rec.continuous     = false;
     rec.interimResults = true;
-    rec.lang = 'en-US';
+    rec.lang           = 'en-US';
     rec.maxAlternatives = 1;
 
     rec.onresult = (e: any) => {
@@ -44,13 +54,14 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
 
     rec.onerror = (e: any) => {
       setListening(false);
-      if (e.error !== 'no-speech') onError?.(e.error === 'not-allowed'
-        ? 'Microphone access denied. Allow it in browser settings.'
-        : `Speech error: ${e.error}`);
+      if (e.error !== 'no-speech') errorRef.current?.(
+        e.error === 'not-allowed'
+          ? 'Microphone access denied. Allow it in browser settings.'
+          : `Speech error: ${e.error}`,
+      );
     };
 
     rec.onend = () => {
-      // Commit any in-flight interim text that never got a final result
       if (pendingInterim.current) {
         finalRef.current(pendingInterim.current);
         pendingInterim.current = '';
@@ -61,14 +72,62 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
     recognitionRef.current = rec;
   }, []);
 
-  const start = useCallback(() => {
-    if (!recognitionRef.current || listening) return;
-    recognitionRef.current.start();
-    setListening(true);
+  // ── Native: @react-native-voice/voice ────────────────────────────────────
+  useEffect(() => {
+    if (Platform.OS === 'web' || !Voice) return;
+
+    setSupported(true);
+
+    Voice.onSpeechStart   = () => setListening(true);
+    Voice.onSpeechEnd     = () => setListening(false);
+
+    Voice.onSpeechPartialResults = (e: any) => {
+      const text = e?.value?.[0] ?? '';
+      if (text) interimRef.current?.(text);
+    };
+
+    Voice.onSpeechResults = (e: any) => {
+      const text = e?.value?.[0] ?? '';
+      if (text) finalRef.current(text);
+      setListening(false);
+    };
+
+    Voice.onSpeechError = (e: any) => {
+      setListening(false);
+      const code = e?.error?.code ?? e?.error ?? '';
+      if (code !== '5' && code !== 'no_match') {
+        errorRef.current?.(
+          String(code).includes('permission')
+            ? 'Microphone permission denied.'
+            : `Voice error: ${code}`,
+        );
+      }
+    };
+
+    return () => { Voice.destroy().catch(() => {}); };
+  }, []);
+
+  // ── Controls ──────────────────────────────────────────────────────────────
+  const start = useCallback(async () => {
+    if (listening) return;
+    if (Platform.OS === 'web') {
+      recognitionRef.current?.start();
+      setListening(true);
+    } else {
+      try {
+        await Voice.start('en-US');
+      } catch (e: any) {
+        errorRef.current?.(`Could not start voice: ${e?.message ?? e}`);
+      }
+    }
   }, [listening]);
 
-  const stop = useCallback(() => {
-    recognitionRef.current?.stop();
+  const stop = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      recognitionRef.current?.stop();
+    } else {
+      try { await Voice.stop(); } catch {}
+    }
     setListening(false);
   }, []);
 

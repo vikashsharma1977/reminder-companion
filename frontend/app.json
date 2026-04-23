@@ -35,7 +35,9 @@
         "ACCESS_BACKGROUND_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "MODIFY_AUDIO_SETTINGS"
+        "MODIFY_AUDIO_SETTINGS",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "plugins": [
@@ -46,10 +48,24 @@
         {
           "microphonePermission": "Allow Reminder Companion to access your microphone."
         }
+      ],
+      [
+        "@react-native-voice/voice",
+        {
+          "microphonePermission": "Allow Reminder Companion to access your microphone for voice reminders.",
+          "speechRecognitionPermission": "Allow Reminder Companion to use speech recognition for voice reminders."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d7babc87-33c6-4d6d-9a7e-abf74b5a1b9c"
+      }
+    },
+    "owner": "vikash.sharma"
   }
 }

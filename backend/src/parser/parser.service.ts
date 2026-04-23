@@ -43,7 +43,8 @@ Rules:
 - Convert all times to UTC before returning scheduledAt
 - "after dinner" → 20:00 local time → convert to UTC
 - "morning" → 08:00 local time → convert to UTC
-- "in X minutes/hours" → current UTC + X minutes/hours
+- "in X minutes/hours" or "X minutes/hours from now" → current UTC + X
+- "from X minutes from now" → current UTC + X
 - For recurrence, set durationDays if mentioned ("for 5 days")`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -110,12 +111,24 @@ Rules:
     const localDateStr = nowInTz.toISOString().slice(0, 10);   // "2026-04-19"
     const localDayOfWeek = nowInTz.getUTCDay();                // 0=Sun…6=Sat (local weekday)
 
+    // ── Relative time ("in 5 minutes", "5 mins from now", "in an hour") ──
+    // Match these first so we can also strip them from the title below
+    const inMinMatch      = lower.match(/\bin\s+(\d+)\s*min(?:s|utes?)?\b/);
+    const inHrMatch       = lower.match(/\bin\s+(\d+)\s*hours?\b/);
+    const inAnHr          = /\bin\s+(?:a|an)\s+hour\b/.test(lower);
+    const inHalfHr        = /\bin\s+half\s+an?\s+hour\b/.test(lower);
+    const fromNowMinMatch = lower.match(/(?:from\s+)?(\d+)\s*min(?:s|utes?)?\s+from\s+now\b/);
+    const fromNowHrMatch  = lower.match(/(?:from\s+)?(\d+)\s*hours?\s+from\s+now\b/);
+
     // ── Clean title ──────────────────────────────────────────────────────
     const title = text
       .replace(/^(remind me (to )?|set (a )?reminder (to )?)/i, '')
       .replace(/\bin\s+(?:a|an)\s+hour\b/gi, '')
       .replace(/\bin\s+half\s+an?\s+hour\b/gi, '')
-      .replace(/\bin\s+\d+\s*(?:min(?:utes?)?|hours?)\b/gi, '')
+      .replace(/\bin\s+\d+\s*(?:min(?:s|utes?)?|hours?)\b/gi, '')
+      .replace(/(?:from\s+)?\d+\s*min(?:s|utes?)?\s+from\s+now\b/gi, '')
+      .replace(/(?:from\s+)?\d+\s*hours?\s+from\s+now\b/gi, '')
+      .replace(/\bfrom\s+now\b/gi, '')
       .replace(/\bevery\s+(?:day|daily|week|weekly|morning|evening|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi, '')
       .replace(/\bevery\b/gi, '')
       .replace(/\b(today|tomorrow|tonight)\b/gi, '')
@@ -128,18 +141,14 @@ Rules:
       .trim()
       .replace(/\s+/g, ' ');
 
-    // ── Relative time ("in 5 minutes", "in an hour", "in half an hour") ──
-    const inMinMatch  = lower.match(/\bin\s+(\d+)\s*min(?:utes?)?\b/);
-    const inHrMatch   = lower.match(/\bin\s+(\d+)\s*hours?\b/);
-    const inAnHr      = /\bin\s+(?:a|an)\s+hour\b/.test(lower);
-    const inHalfHr    = /\bin\s+half\s+an?\s+hour\b/.test(lower);
-
-    if (inMinMatch || inHrMatch || inAnHr || inHalfHr) {
+    if (inMinMatch || inHrMatch || inAnHr || inHalfHr || fromNowMinMatch || fromNowHrMatch) {
       let addMs = 0;
-      if (inMinMatch)   addMs = parseInt(inMinMatch[1]) * 60_000;
-      else if (inHrMatch) addMs = parseInt(inHrMatch[1]) * 3_600_000;
-      else if (inAnHr)  addMs = 3_600_000;
-      else              addMs = 1_800_000;
+      if (fromNowMinMatch)    addMs = parseInt(fromNowMinMatch[1]) * 60_000;
+      else if (fromNowHrMatch) addMs = parseInt(fromNowHrMatch[1]) * 3_600_000;
+      else if (inMinMatch)    addMs = parseInt(inMinMatch[1]) * 60_000;
+      else if (inHrMatch)     addMs = parseInt(inHrMatch[1]) * 3_600_000;
+      else if (inAnHr)        addMs = 3_600_000;
+      else                    addMs = 1_800_000;
 
       return {
         title: title || text.trim(),

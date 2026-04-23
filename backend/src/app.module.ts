@@ -61,12 +61,17 @@ import { envValidationSchema } from './config/env.validation';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const redisUrl = config.get<string>('REDIS_URL') || '';
+        let redisHost = 'none';
+        if (redisUrl) {
+          try { redisHost = new URL(redisUrl).hostname || 'EMPTY_HOST'; } catch { redisHost = 'INVALID_URL'; }
+        }
+        console.log(`[Redis] REDIS_URL present=${!!redisUrl} len=${redisUrl.length} host=${redisHost}`);
         return redisUrl
           ? { url: redisUrl }
           : {
               redis: {
-                host: config.get('REDIS_HOST'),
-                port: config.get<number>('REDIS_PORT'),
+                host: config.get('REDIS_HOST') || 'localhost',
+                port: config.get<number>('REDIS_PORT') || 6379,
               },
             };
       },

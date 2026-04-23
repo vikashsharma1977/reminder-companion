@@ -152,13 +152,17 @@ export default function NewReminderScreen() {
     onError: (err: any) => setError(err?.response?.data?.message ?? 'Could not parse. Try again.'),
   });
 
+  const isMedicineInput = MEDICINE_RE.test(inputText);
+
+  const openMedicineWizard = () => {
+    // Pass the raw input so the wizard can pre-fill the name field
+    router.push({ pathname: '/reminder/medicine', params: { prefill: inputText.trim() } });
+  };
+
   const handleParse = () => {
     if (!inputText.trim()) return;
     setError('');
-    if (MEDICINE_RE.test(inputText)) {
-      router.push('/reminder/medicine');
-      return;
-    }
+    if (isMedicineInput) { openMedicineWizard(); return; }
     parseMutation.mutate(inputText.trim());
   };
 
@@ -235,6 +239,34 @@ export default function NewReminderScreen() {
               <Text style={styles.inlineErrorText}>{error}</Text>
             </View>
           ) : null}
+
+          {/* Medicine wizard hint — appears as soon as medicine keywords are typed */}
+          {isMedicineInput && inputText.trim().length > 0 && (
+            Platform.OS === 'web' ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                background: '#ECFDF5', borderRadius: 12, padding: '10px 14px',
+                border: '1.5px solid #A7F3D0', marginBottom: 8,
+              } as any}>
+                <span style={{ fontSize: 20 }}>💊</span>
+                <span style={{ flex: 1, fontSize: 12, color: '#065F46', fontWeight: '600' }}>
+                  Looks like a medicine reminder — use the wizard for doses & timing.
+                </span>
+                <button onClick={openMedicineWizard} style={{
+                  padding: '6px 12px', borderRadius: 8, border: 'none',
+                  background: '#10B981', color: '#fff', fontSize: 12, fontWeight: '700', cursor: 'pointer',
+                } as any}>Use Wizard</button>
+              </div>
+            ) : (
+              <TouchableOpacity style={styles.medicineHint} onPress={openMedicineWizard}>
+                <Text style={styles.medicineHintEmoji}>💊</Text>
+                <Text style={styles.medicineHintText}>
+                  Looks like a medicine reminder — tap to use the dose wizard
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color="#10B981" />
+              </TouchableOpacity>
+            )
+          )}
 
           {Platform.OS === 'web' ? (
             <button onClick={handleParse} disabled={!inputText.trim() || parseMutation.isPending} style={{
@@ -528,4 +560,12 @@ const styles = StyleSheet.create({
 
   inlineError: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#FEF2F2', borderRadius: 10, padding: 10, marginBottom: 12 },
   inlineErrorText: { color: '#EF4444', fontSize: 12, flex: 1 },
+
+  medicineHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#ECFDF5', borderRadius: 12, padding: 12,
+    borderWidth: 1.5, borderColor: '#A7F3D0', marginBottom: 8,
+  },
+  medicineHintEmoji: { fontSize: 20 },
+  medicineHintText: { flex: 1, fontSize: 12, color: '#065F46', fontWeight: '600', lineHeight: 17 },
 });

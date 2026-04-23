@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, ScrollView, Platform, TouchableOpacity,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../../src/api/client';
+import { useSpeechRecognition } from '../../src/hooks/useSpeechRecognition';
+import { scheduleLocalReminder } from '../../src/utils/localNotifications';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,16 +96,50 @@ function TimeInput({ value, onChange }: { value: string; onChange: (v: string) =
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
+// Extract a likely medicine name from free-form text like
+// "Take Metformin after dinner for 5 days"
+function extractMedicineName(text: string): string {
+  return text
+    .replace(/^(remind me (to )?|take|set (a )?reminder (to )?)/i, '')
+    .replace(/\b(medicine|tablet|pill|capsule|dose|dosage|mg|medication|drug|syrup|injection|inhaler)\b/gi, '')
+    .replace(/\b(after|before|with|for|every|daily|day|night|morning|evening|dinner|lunch|breakfast)\b.*$/i, '')
+    .replace(/\d+\s*(mg|ml|times?|days?)/gi, '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;]+$/, '')
+    .trim();
+}
+
 export default function MedicineReminderScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const params = useLocalSearchParams<{ prefill?: string }>();
 
   const [step, setStep] = useState<'setup' | 'timing' | 'preview'>('setup');
   const [error, setError] = useState('');
+  const [voiceError, setVoiceError] = useState('');
 
   // Step 1 – setup
   const [medicineName, setMedicineName] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Voice recognition for the medicine name field
+  const { listening, supported, toggle } = useSpeechRecognition({
+    onFinal: (text) => {
+      setMedicineName(extractMedicineName(text) || text.trim());
+      setVoiceError('');
+      setError('');
+    },
+    onError: (msg) => setVoiceError(msg),
+  });
+
+  // Pre-fill medicine name when arriving from the general reminder box
+  useEffect(() => {
+    if (params.prefill) {
+      const name = extractMedicineName(params.prefill);
+      if (name) setMedicineName(name);
+    }
+  }, []);
   const [frequency, setFrequency] = useState<Frequency>(1);
   const [duration, setDuration] = useState<Duration>('ongoing');
   const [durationDays, setDurationDays] = useState('7');
@@ -117,10 +153,19 @@ export default function MedicineReminderScreen() {
 
   const saveMutation = useMutation({
     mutationFn: async (payloads: object[]) => {
-      for (const p of payloads) await remindersApi.create(p);
+      const results = [];
+      for (const p of payloads) {
+        const res = await remindersApi.create(p);
+        results.push(res.data);
+      }
+      return results;
     },
-    onSuccess: () => {
+    onSuccess: (savedReminders) => {
       qc.invalidateQueries({ queryKey: ['reminders'] });
+      // Schedule a local OS alarm for each dose
+      for (const r of savedReminders) {
+        scheduleLocalReminder(r).catch(() => {});
+      }
       router.canGoBack() ? router.back() : router.replace('/(tabs)');
     },
     onError: (e: any) => setError(e?.response?.data?.message ?? 'Could not save. Try again.'),
@@ -177,14 +222,41 @@ export default function MedicineReminderScreen() {
           </View>
 
           <Text style={styles.fieldLabel}>MEDICINE NAME</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="e.g. Metformin, Vitamin D…"
-            placeholderTextColor="#A0A3B1"
-            value={medicineName}
-            onChangeText={v => { setMedicineName(v); setError(''); }}
-            autoFocus
-          />
+          <View style={styles.nameRow}>
+            <TextInput
+              style={[styles.input, styles.nameInput]}
+              placeholder={listening ? '🎙 Listening…' : 'e.g. Metformin, Vitamin D…'}
+              placeholderTextColor={listening ? '#8B5CF6' : '#A0A3B1'}
+              value={medicineName}
+              onChangeText={v => { setMedicineName(v); setError(''); }}
+              autoFocus={!params.prefill}
+            />
+            {supported && (
+              Platform.OS === 'web' ? (
+                <button onClick={toggle} style={{
+                  padding: '0 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+                  background: listening ? 'linear-gradient(135deg,#EF4444,#F87171)' : 'linear-gradient(135deg,#6C5CE7,#8B5CF6)',
+                  color: '#fff', fontSize: 13, fontWeight: '700', whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 8px rgba(108,92,231,0.3)',
+                } as any}>
+                  {listening ? '■ Stop' : '🎙 Speak'}
+                </button>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.micBtn, listening && styles.micBtnActive]}
+                  onPress={toggle}
+                >
+                  <Ionicons name={listening ? 'stop' : 'mic'} size={18} color="#fff" />
+                </TouchableOpacity>
+              )
+            )}
+          </View>
+          {voiceError ? (
+            <View style={styles.errorBox}>
+              <Ionicons name="mic-off-outline" size={14} color="#EF4444" />
+              <Text style={styles.errorText}>{voiceError}</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.fieldLabel}>NOTES (OPTIONAL)</Text>
           <TextInput
@@ -449,4 +521,13 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   btnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
   btnTextGhost: { color: '#6C5CE7' },
+
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  nameInput: { flex: 1, marginBottom: 0 },
+  micBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#6C5CE7', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#6C5CE7', shadowOpacity: 0.4, shadowRadius: 6, elevation: 3,
+  },
+  micBtnActive: { backgroundColor: '#EF4444', shadowColor: '#EF4444' },
 });

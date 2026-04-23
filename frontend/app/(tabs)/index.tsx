@@ -15,6 +15,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../../src/api/client';
 import { suppressFiringReminder } from '../../src/hooks/useNotifications';
+import { cancelLocalReminder } from '../../src/utils/localNotifications';
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
   work:     { color: '#3B82F6', bg: '#EFF6FF', icon: '💼' },
@@ -169,6 +170,7 @@ export default function TodayScreen() {
     mutationFn: (id: string) => remindersApi.complete(id),
     onSuccess: (_data, id) => {
       suppressFiringReminder(id);
+      cancelLocalReminder(id).catch(() => {});
       qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });

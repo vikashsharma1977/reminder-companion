@@ -6,7 +6,8 @@ import { View, Platform, AppState } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
-import { notificationsApi, tokenStore } from '../src/api/client';
+import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
+import { syncLocalNotifications } from '../src/utils/localNotifications';
 
 // Show alerts for foreground notifications (iOS especially)
 Notifications.setNotificationHandler({
@@ -71,14 +72,42 @@ function AppShell() {
       } catch {}
     })();
 
-    // Clear badge whenever the app comes to the foreground
+    // On foreground: clear badge + re-sync local notifications from server
+    const syncOnForeground = async () => {
+      Notifications.setBadgeCountAsync(0).catch(() => {});
+      try {
+        const token = await tokenStore.getAccess();
+        if (!token) return;
+        const { data } = await remindersApi.getAll();
+        await syncLocalNotifications(data);
+      } catch {}
+    };
+
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        Notifications.setBadgeCountAsync(0).catch(() => {});
-      }
+      if (state === 'active') syncOnForeground();
     });
-    // Also clear on first mount
-    Notifications.setBadgeCountAsync(0).catch(() => {});
+    syncOnForeground(); // also run immediately on mount
+    return () => sub.remove();
+  }, []);
+
+  // Handle notification taps (from lock screen / notification shade).
+  // Show the snooze modal exactly as if the reminder just fired in-app.
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const data = response.notification.request.content.data as any;
+      const reminderId: string = data?.reminderId;
+      if (!reminderId) return;
+      const content = response.notification.request.content;
+      setActiveReminder({
+        reminderId,
+        title: content.title ?? '',
+        scheduledAt: null,
+        notes: typeof content.body === 'string' &&
+               content.body !== 'Time for your reminder!'
+               ? content.body : undefined,
+      });
+    });
     return () => sub.remove();
   }, []);
 

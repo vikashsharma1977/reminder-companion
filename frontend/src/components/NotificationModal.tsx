@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../api/client';
 import { FiredReminder } from '../hooks/useNotifications';
 import { useAlertPrefs } from '../hooks/useAlertPrefs';
+import { cancelLocalReminder, scheduleLocalReminder } from '../utils/localNotifications';
 
 let Audio: any = null;
 try { Audio = require('expo-av').Audio; } catch {}
@@ -76,13 +77,24 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => remindersApi.complete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); onDismiss(); },
+    onSuccess: (_data, id) => {
+      cancelLocalReminder(id).catch(() => {});
+      qc.invalidateQueries({ queryKey: ['reminders'] });
+      onDismiss();
+    },
   });
 
   const snoozeMutation = useMutation({
     mutationFn: ({ id, minutes }: { id: string; minutes: number }) =>
       remindersApi.snooze(id, minutes),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reminders'] }); onDismiss(); },
+    onSuccess: (res, { id }) => {
+      // Reschedule local notification for the new snoozed time
+      cancelLocalReminder(id)
+        .then(() => scheduleLocalReminder(res.data))
+        .catch(() => {});
+      qc.invalidateQueries({ queryKey: ['reminders'] });
+      onDismiss();
+    },
   });
 
   if (!reminder) return null;

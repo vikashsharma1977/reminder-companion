@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { parserApi, remindersApi } from '../../src/api/client';
 import { useSpeechRecognition } from '../../src/hooks/useSpeechRecognition';
+import { scheduleLocalReminder } from '../../src/utils/localNotifications';
 
 // Lazy-require so a missing native module doesn't crash the whole screen
 let DateTimePicker: any = null;
@@ -126,8 +127,11 @@ export default function NewReminderScreen() {
 
   const saveMutation = useMutation({
     mutationFn: (data: object) => remindersApi.create(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['reminders'] });
+      // Schedule a local OS-level notification so the alert fires even when
+      // the app is closed or the phone is locked.
+      scheduleLocalReminder(res.data).catch(() => {});
       router.canGoBack() ? router.back() : router.replace('/(tabs)');
     },
     onError: (err: any) => setError(err?.response?.data?.message ?? 'Could not save reminder.'),

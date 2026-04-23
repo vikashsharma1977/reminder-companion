@@ -24,9 +24,19 @@ interface Reminder {
   id: string;
   title: string;
   scheduledAt: string | null;
+  lastFiredAt: string | null;
   category: string;
   recurrence: string;
   status: string;
+}
+
+function firedToday(r: Reminder): boolean {
+  if (!r.lastFiredAt || r.recurrence === 'none') return false;
+  const fired = new Date(r.lastFiredAt);
+  const now = new Date();
+  return fired.getFullYear() === now.getFullYear() &&
+    fired.getMonth() === now.getMonth() &&
+    fired.getDate() === now.getDate();
 }
 
 function getGreeting() {
@@ -43,17 +53,25 @@ function formatTime(iso: string) {
 function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) {
   const cfg = CATEGORY_CONFIG[item.category] ?? CATEGORY_CONFIG.other;
   const isPast = item.scheduledAt && new Date(item.scheduledAt) < new Date();
+  const doneToday = firedToday(item);
 
   return (
-    <View style={[styles.card, isPast && styles.cardPast]}>
-      <View style={[styles.cardAccent, { backgroundColor: cfg.color }]} />
+    <View style={[styles.card, doneToday ? styles.cardDoneToday : isPast && styles.cardPast]}>
+      <View style={[styles.cardAccent, { backgroundColor: doneToday ? '#D1D5DB' : cfg.color }]} />
       <View style={styles.cardBody}>
         <View style={styles.cardRow}>
-          <Text style={styles.cardIcon}>{cfg.icon}</Text>
+          <Text style={[styles.cardIcon, doneToday && styles.dimmed]}>{doneToday ? '✓' : cfg.icon}</Text>
           <View style={styles.cardMeta}>
-            <Text style={styles.cardTitle} numberOfLines={2}>{item.title}</Text>
+            <Text style={[styles.cardTitle, doneToday && styles.cardTitleDone]} numberOfLines={2}>
+              {item.title}
+            </Text>
             <View style={styles.cardFooter}>
-              {item.scheduledAt ? (
+              {doneToday ? (
+                <View style={[styles.timePill, { backgroundColor: '#F3F4F6' }]}>
+                  <Ionicons name="checkmark-circle" size={11} color="#9CA3AF" />
+                  <Text style={[styles.timePillText, { color: '#9CA3AF' }]}>Done for today</Text>
+                </View>
+              ) : item.scheduledAt ? (
                 <View style={styles.timePill}>
                   <Ionicons name="time-outline" size={11} color={isPast ? '#EF4444' : '#6C5CE7'} />
                   <Text style={[styles.timePillText, isPast && styles.timePillPast]}>
@@ -66,37 +84,41 @@ function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) 
                 </View>
               )}
               {item.recurrence !== 'none' && (
-                <View style={styles.recurrencePill}>
-                  <Ionicons name="repeat" size={10} color="#10B981" />
-                  <Text style={styles.recurrencePillText}>{item.recurrence}</Text>
+                <View style={[styles.recurrencePill, doneToday && { backgroundColor: '#F3F4F6' }]}>
+                  <Ionicons name="repeat" size={10} color={doneToday ? '#9CA3AF' : '#10B981'} />
+                  <Text style={[styles.recurrencePillText, doneToday && { color: '#9CA3AF' }]}>
+                    {item.recurrence}
+                  </Text>
                 </View>
               )}
             </View>
           </View>
         </View>
       </View>
-      {Platform.OS === 'web' ? (
-        <button
-          onClick={onDone}
-          style={{
-            background: 'transparent',
-            border: `1.5px solid ${cfg.color}`,
-            borderRadius: 20,
-            padding: '6px 14px',
-            color: cfg.color,
-            fontSize: 12,
-            fontWeight: '700',
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-            alignSelf: 'center',
-          } as any}
-        >
-          Done
-        </button>
-      ) : (
-        <TouchableOpacity style={[styles.doneBtn, { borderColor: cfg.color }]} onPress={onDone}>
-          <Text style={[styles.doneBtnText, { color: cfg.color }]}>Done</Text>
-        </TouchableOpacity>
+      {!doneToday && (
+        Platform.OS === 'web' ? (
+          <button
+            onClick={onDone}
+            style={{
+              background: 'transparent',
+              border: `1.5px solid ${cfg.color}`,
+              borderRadius: 20,
+              padding: '6px 14px',
+              color: cfg.color,
+              fontSize: 12,
+              fontWeight: '700',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              alignSelf: 'center',
+            } as any}
+          >
+            Done
+          </button>
+        ) : (
+          <TouchableOpacity style={[styles.doneBtn, { borderColor: cfg.color }]} onPress={onDone}>
+            <Text style={[styles.doneBtnText, { color: cfg.color }]}>Done</Text>
+          </TouchableOpacity>
+        )
       )}
     </View>
   );
@@ -116,7 +138,10 @@ export default function TodayScreen() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
   });
 
-  const reminders = data ?? [];
+  const allReminders = data ?? [];
+  const doneReminders = allReminders.filter(firedToday);
+  const pendingReminders = allReminders.filter((r) => !firedToday(r));
+  const reminders = [...pendingReminders, ...doneReminders];
   const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
@@ -128,7 +153,7 @@ export default function TodayScreen() {
           <Text style={styles.date}>{today}</Text>
         </View>
         <View style={styles.countBubble}>
-          <Text style={styles.countText}>{reminders.length}</Text>
+          <Text style={styles.countText}>{pendingReminders.length}</Text>
         </View>
       </View>
 
@@ -137,7 +162,9 @@ export default function TodayScreen() {
         <View style={styles.strip}>
           <Ionicons name="checkmark-circle-outline" size={14} color="#6C5CE7" />
           <Text style={styles.stripText}>
-            {reminders.length} reminder{reminders.length !== 1 ? 's' : ''} for today
+            {pendingReminders.length > 0
+              ? `${pendingReminders.length} remaining${doneReminders.length > 0 ? ` · ${doneReminders.length} done today` : ''}`
+              : 'All done for today!'}
           </Text>
         </View>
       )}
@@ -250,6 +277,9 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   cardPast: { opacity: 0.65 },
+  cardDoneToday: { opacity: 0.6 },
+  cardTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },
+  dimmed: { opacity: 0.4 },
   cardAccent: { width: 4, borderRadius: 2 },
   cardBody: { flex: 1, padding: 14 },
   cardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },

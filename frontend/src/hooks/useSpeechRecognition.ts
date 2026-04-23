@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Platform } from 'react-native';
+import { Platform, PermissionsAndroid } from 'react-native';
 
 interface Options {
   onInterim?: (text: string) => void;
@@ -115,6 +115,20 @@ export function useSpeechRecognition({ onInterim, onFinal, onError }: Options) {
       setListening(true);
     } else {
       try {
+        if (Platform.OS === 'android') {
+          const granted = await PermissionsAndroid.request(
+            PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+            {
+              title: 'Microphone Permission',
+              message: 'Reminder Companion needs microphone access for voice reminders.',
+              buttonPositive: 'Allow',
+            },
+          );
+          if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+            errorRef.current?.('Microphone permission denied.');
+            return;
+          }
+        }
         await Voice.start('en-US');
       } catch (e: any) {
         errorRef.current?.(`Could not start voice: ${e?.message ?? e}`);

@@ -45,6 +45,19 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#6366f1",
+          "sounds": [
+            "./assets/sounds/chime.wav",
+            "./assets/sounds/bell.wav",
+            "./assets/sounds/gentle.wav",
+            "./assets/sounds/urgent.wav"
+          ]
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": { "newArchEnabled": false },

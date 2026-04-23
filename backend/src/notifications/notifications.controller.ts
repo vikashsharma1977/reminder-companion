@@ -1,20 +1,37 @@
 import {
-  Controller, Sse, Query, UnauthorizedException,
+  Controller, Sse, Post, Body, Query, Request, UnauthorizedException, UseGuards,
 } from '@nestjs/common';
+import { IsString, IsNotEmpty } from 'class-validator';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { EventBusService } from './event-bus.service';
 import { SseTicketService } from '../auth/sse-ticket.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UsersService } from '../users/users.service';
+
+class RegisterTokenDto {
+  @IsString()
+  @IsNotEmpty()
+  token: string;
+}
 
 @Controller('notifications')
 export class NotificationsController {
   constructor(
     private readonly eventBus: EventBusService,
     private readonly sseTicketService: SseTicketService,
+    private readonly usersService: UsersService,
   ) {}
 
-  // #7 — Accepts a one-time 60 s ticket (not the long-lived access token).
-  // Frontend obtains a ticket via POST /auth/sse-ticket before connecting.
+  @Post('register-token')
+  @UseGuards(JwtAuthGuard)
+  async registerToken(
+    @Request() req: { user: { id: string } },
+    @Body() dto: RegisterTokenDto,
+  ): Promise<void> {
+    await this.usersService.updateFcmToken(req.user.id, dto.token);
+  }
+
   @Sse('stream')
   stream(@Query('ticket') ticket: string): Observable<MessageEvent> {
     const userId = this.sseTicketService.consume(ticket);

@@ -12,6 +12,7 @@ import { useRouter } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../../src/api/client';
+import { suppressFiringReminder } from '../../src/hooks/useNotifications';
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
   work:     { color: '#3B82F6', bg: '#EFF6FF', icon: '💼' },
@@ -135,7 +136,10 @@ export default function TodayScreen() {
 
   const completeMutation = useMutation({
     mutationFn: (id: string) => remindersApi.complete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
+    onSuccess: (_data, id) => {
+      suppressFiringReminder(id);
+      qc.invalidateQueries({ queryKey: ['reminders'] });
+    },
   });
 
   const allReminders = data ?? [];

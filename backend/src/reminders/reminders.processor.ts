@@ -1,18 +1,25 @@
 import { Processor, Process, InjectQueue } from '@nestjs/bull';
+import { Logger } from '@nestjs/common';
 import { Job, Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reminder, ReminderStatus, RecurrenceType } from './reminder.entity';
 import { EventBusService } from '../notifications/event-bus.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { UsersService } from '../users/users.service';
 
 @Processor('reminders')
 export class RemindersProcessor {
+  private readonly logger = new Logger(RemindersProcessor.name);
+
   constructor(
     @InjectRepository(Reminder)
     private readonly reminderRepo: Repository<Reminder>,
     @InjectQueue('reminders')
     private readonly reminderQueue: Queue,
     private readonly eventBus: EventBusService,
+    private readonly notificationsService: NotificationsService,
+    private readonly usersService: UsersService,
   ) {}
 
   @Process('fire')
@@ -34,7 +41,7 @@ export class RemindersProcessor {
       reminder.lastFiredAt = new Date();
       await this.reminderRepo.save(reminder);
 
-      // Emit SSE event to the user
+      // Emit SSE event to the user (web)
       this.eventBus.emit({
         userId: reminder.userId,
         reminderId: reminder.id,
@@ -43,12 +50,26 @@ export class RemindersProcessor {
         notes: reminder.notes ?? undefined,
       });
 
-      console.log(`[ReminderQueue] Fired reminder "${reminder.title}" for user ${reminder.userId}`);
+      // Send push notification to mobile device
+      try {
+        const user = await this.usersService.findById(reminder.userId);
+        if (user?.fcmToken) {
+          await this.notificationsService.sendPush(user.fcmToken, {
+            title: reminder.title,
+            body: reminder.notes ?? 'Time for your reminder!',
+            data: { reminderId: reminder.id },
+          });
+        }
+      } catch (err: any) {
+        this.logger.warn(`Push notification failed for reminder ${reminderId}: ${err?.message}`);
+      }
+
+      this.logger.log(`Fired reminder "${reminder.title}" for user ${reminder.userId}`);
 
       // Schedule next occurrence for recurring reminders
       await this.scheduleNextOccurrence(reminder);
     } catch (err) {
-      console.error(`[ReminderQueue] Failed to fire reminder ${reminderId}:`, err);
+      this.logger.error(`Failed to fire reminder ${reminderId}: ${err}`);
     }
   }
 
@@ -87,7 +108,7 @@ export class RemindersProcessor {
     const delay = nextAt.getTime() - Date.now();
     if (delay > 0) {
       await this.reminderQueue.add('fire', { reminderId: reminder.id }, { delay });
-      console.log(`[ReminderQueue] Scheduled next occurrence for "${reminder.title}" at ${nextAt.toISOString()}`);
+      this.logger.log(`Scheduled next occurrence for "${reminder.title}" at ${nextAt.toISOString()}`);
     }
   }
 

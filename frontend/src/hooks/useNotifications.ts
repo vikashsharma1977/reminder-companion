@@ -2,6 +2,15 @@ import { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { authApi, tokenStore, remindersApi } from '../api/client';
 
+// Module-level suppression: IDs manually completed by the user (not auto-fired).
+// Prevents the polling loop from re-showing the notification modal after the user
+// taps Done on the today screen (which updates lastFiredAt on the backend).
+const suppressedIds = new Set<string>();
+export function suppressFiringReminder(id: string) {
+  suppressedIds.add(id);
+  setTimeout(() => suppressedIds.delete(id), 3 * 60 * 1000);
+}
+
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'https://reminder-companion-production.up.railway.app/api/v1';
 
 export interface FiredReminder {
@@ -59,6 +68,7 @@ export function useNotifications(onReminder: (reminder: FiredReminder) => void) 
       if (!token) return;
       const { data } = await remindersApi.getFiring();
       for (const r of data) {
+        if (suppressedIds.has(r.id)) continue;
         const key = `${r.id}_${r.lastFiredAt}`;
         if (!seenRef.current.has(key)) {
           seenRef.current.add(key);

@@ -17,10 +17,10 @@ const SOUND_FILES: Record<string, any> = {
 };
 
 const VIBRATION_PATTERNS: Record<string, number[]> = {
-  chime:  [0, 200],
-  bell:   [0, 300],
-  gentle: [0, 150],
-  urgent: [0, 100, 80, 100, 80, 100],
+  chime:  [0, 400, 150, 400, 150, 400],
+  bell:   [0, 500, 150, 500, 150, 500],
+  gentle: [0, 500, 200, 500],
+  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300],
   none:   [],
 };
 
@@ -56,15 +56,21 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
 
     if (prefs.sound && sound !== 'none' && Audio && SOUND_FILES[sound]) {
       let soundObj: any;
-      Audio.Sound.createAsync(SOUND_FILES[sound], { shouldPlay: true })
-        .then(({ sound: s }: any) => {
+      (async () => {
+        try {
+          await Audio.setAudioModeAsync({
+            playsInSilentModeIOS: true,
+            allowsRecordingIOS: false,
+            staysActiveInBackground: false,
+          });
+          const { sound: s } = await Audio.Sound.createAsync(
+            SOUND_FILES[sound],
+            { shouldPlay: true, volume: 1.0 },
+          );
           soundObj = s;
-          return s.playAsync();
-        })
-        .catch(() => {})
-        .finally(() => {
-          setTimeout(() => soundObj?.unloadAsync().catch(() => {}), 3000);
-        });
+          setTimeout(() => soundObj?.unloadAsync().catch(() => {}), 5000);
+        } catch {}
+      })();
     }
   }, [reminder?.reminderId]);
 

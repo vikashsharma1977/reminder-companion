@@ -3,9 +3,10 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { EventBusService } from './event-bus.service';
 import { AuthModule } from '../auth/auth.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, UsersModule],
   controllers: [NotificationsController],
   providers: [NotificationsService, EventBusService],
   exports: [NotificationsService, EventBusService],

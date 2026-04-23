@@ -141,6 +141,13 @@ export const remindersApi = {
   remove: (id: string) => apiClient.delete(`/reminders/${id}`),
 };
 
+// ── Notifications ─────────────────────────────────────────────────────────
+
+export const notificationsApi = {
+  registerPushToken: (token: string) =>
+    apiClient.post('/notifications/register-token', { token }),
+};
+
 // ── Users ─────────────────────────────────────────────────────────────────
 
 export const usersApi = {

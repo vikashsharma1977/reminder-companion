@@ -13,12 +13,18 @@ export class NotificationsService {
 
   constructor(private readonly config: ConfigService) {}
 
-  async sendPush(fcmToken: string, payload: PushPayload): Promise<void> {
-    const fcmKey = this.config.get<string>('FCM_SERVER_KEY');
+  async sendPush(token: string, payload: PushPayload): Promise<void> {
+    if (!token) return;
 
+    // Expo push tokens are routed through Expo's push service (no server key needed)
+    if (token.startsWith('ExponentPushToken[') || token.startsWith('ExpoPushToken[')) {
+      await this.sendExpoPush(token, payload);
+      return;
+    }
+
+    const fcmKey = this.config.get<string>('FCM_SERVER_KEY');
     if (!fcmKey) {
-      // Dev mode: just log the notification
-      this.logger.log(`[DEV PUSH] → ${fcmToken?.slice(0, 8)}... | ${payload.title}: ${payload.body}`);
+      this.logger.log(`[DEV PUSH] → ${token.slice(0, 8)}... | ${payload.title}: ${payload.body}`);
       return;
     }
 
@@ -29,7 +35,7 @@ export class NotificationsService {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        to: fcmToken,
+        to: token,
         notification: { title: payload.title, body: payload.body },
         data: payload.data ?? {},
       }),
@@ -37,6 +43,28 @@ export class NotificationsService {
 
     if (!response.ok) {
       this.logger.error(`FCM push failed: ${response.status}`);
+    }
+  }
+
+  private async sendExpoPush(token: string, payload: PushPayload): Promise<void> {
+    const response = await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: token,
+        title: payload.title,
+        body: payload.body,
+        data: payload.data ?? {},
+        sound: 'default',
+        priority: 'high',
+      }),
+    });
+    if (!response.ok) {
+      this.logger.error(`Expo push failed: ${response.status}`);
     }
   }
 

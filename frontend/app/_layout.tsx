@@ -3,8 +3,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect } from 'react';
 import { View, Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
+import { notificationsApi, tokenStore } from '../src/api/client';
+
+// Show alerts for foreground notifications (iOS especially)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,11 +28,35 @@ const queryClient = new QueryClient({
 function AppShell() {
   const [activeReminder, setActiveReminder] = useState<FiredReminder | null>(null);
 
-  // Request browser notification permission on first load (web only)
+  // Web: request browser notification permission
   useEffect(() => {
     if (Platform.OS === 'web' && typeof Notification !== 'undefined' && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+  }, []);
+
+  // Native: register for Expo push notifications and send token to backend
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    (async () => {
+      try {
+        const { status: existing } = await Notifications.getPermissionsAsync();
+        let finalStatus = existing;
+        if (existing !== 'granted') {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+        if (finalStatus !== 'granted') return;
+
+        const token = await tokenStore.getAccess();
+        if (!token) return;
+
+        const { data: pushToken } = await Notifications.getExpoPushTokenAsync({
+          projectId: 'd7babc87-33c6-4d6d-9a7e-abf74b5a1b9c',
+        });
+        await notificationsApi.registerPushToken(pushToken);
+      } catch {}
+    })();
   }, []);
 
   useNotifications((reminder) => {

@@ -6,12 +6,14 @@ import { RemindersService } from './reminders.service';
 import { RemindersController } from './reminders.controller';
 import { RemindersProcessor } from './reminders.processor';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Reminder]),
     BullModule.registerQueue({ name: 'reminders' }),
     NotificationsModule,
+    UsersModule,
   ],
   providers: [RemindersService, RemindersProcessor],
   controllers: [RemindersController],

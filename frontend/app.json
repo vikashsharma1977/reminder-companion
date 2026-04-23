@@ -45,6 +45,13 @@
       "expo-router",
       "expo-secure-store",
       [
+        "expo-build-properties",
+        {
+          "android": { "newArchEnabled": false },
+          "ios": { "newArchEnabled": false }
+        }
+      ],
+      [
         "expo-av",
         {
           "microphonePermission": "Allow Reminder Companion to access your microphone."

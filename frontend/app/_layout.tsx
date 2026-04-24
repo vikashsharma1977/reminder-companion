@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { View, Platform, AppState, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
+import * as IntentLauncher from 'expo-intent-launcher';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
@@ -64,27 +65,35 @@ function AppShell() {
         }
         if (finalStatus !== 'granted') return;
 
-        // On Android, ask user to exempt us from battery optimization (once).
-        // Without this, Doze mode can delay or kill exact alarms when screen is off.
+        // Android: request battery optimization exemption so Doze mode does not
+        // block exact alarms when the screen is off.
+        // Key versioned so a fixed build re-prompts users who saw the broken dialog.
         if (Platform.OS === 'android') {
-          const asked = await SecureStore.getItemAsync('battery_opt_asked');
+          const asked = await SecureStore.getItemAsync('notif_setup_v2');
           if (!asked) {
-            await SecureStore.setItemAsync('battery_opt_asked', '1');
+            // Mark done before showing so a crash loop cannot re-prompt infinitely
+            await SecureStore.setItemAsync('notif_setup_v2', '1');
             Alert.alert(
               'Allow background alerts',
-              'For reminders to pop up when your screen is off, please tap "Allow" on the next screen.',
-              [{
-                text: 'Continue',
-                onPress: async () => {
-                  try {
-                    const IntentLauncher = require('expo-intent-launcher');
-                    await IntentLauncher.startActivityAsync(
+              'To receive reminders when your screen is off, please allow this app to run in the background.',
+              [
+                { text: 'Skip', style: 'cancel' },
+                {
+                  text: 'Allow',
+                  onPress: () => {
+                    // IntentLauncher is a static import — no dynamic require needed
+                    IntentLauncher.startActivityAsync(
                       'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
                       { data: 'package:com.remindercompanion.app' },
-                    );
-                  } catch {}
+                    ).catch(() => {
+                      // Fallback: open the full battery optimization list
+                      IntentLauncher.startActivityAsync(
+                        'android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS',
+                      ).catch(() => {});
+                    });
+                  },
                 },
-              }],
+              ],
             );
           }
         }

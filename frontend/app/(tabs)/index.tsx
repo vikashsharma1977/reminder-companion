@@ -9,6 +9,7 @@ import {
   ScrollView,
   Animated,
   Vibration,
+  Alert,
 } from 'react-native';
 import { useRef, useEffect, useState } from 'react';
 import { useRouter } from 'expo-router';
@@ -17,6 +18,45 @@ import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../../src/api/client';
 import { suppressFiringReminder } from '../../src/hooks/useNotifications';
 import { cancelLocalReminder } from '../../src/utils/localNotifications';
+
+async function openBatterySettings() {
+  if (Platform.OS !== 'android') return;
+  try {
+    const IL = require('expo-intent-launcher');
+    await IL.startActivityAsync(
+      'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+      { data: 'package:com.remindercompanion.app' },
+    );
+  } catch {
+    try {
+      const IL = require('expo-intent-launcher');
+      await IL.startActivityAsync('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
+    } catch {}
+  }
+}
+
+function NotifBanner() {
+  if (Platform.OS !== 'android') return null;
+  return (
+    <TouchableOpacity
+      style={styles.notifBanner}
+      onPress={() =>
+        Alert.alert(
+          'Background alerts',
+          'Allow this app to ignore battery optimizations so reminders fire even when your screen is off.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Open Settings', onPress: openBatterySettings },
+          ],
+        )
+      }
+    >
+      <Ionicons name="notifications-off-outline" size={13} color="#D97706" />
+      <Text style={styles.notifBannerText}>Tap to enable alerts when screen is off</Text>
+      <Ionicons name="chevron-forward" size={13} color="#D97706" />
+    </TouchableOpacity>
+  );
+}
 
 const CATEGORY_CONFIG: Record<string, { color: string; bg: string; icon: string }> = {
   work:     { color: '#3B82F6', bg: '#EFF6FF', icon: '💼' },
@@ -231,6 +271,9 @@ export default function TodayScreen() {
         </View>
       )}
 
+      {/* Battery optimization nudge (Android only) */}
+      <NotifBanner />
+
       {/* List */}
       {isLoading ? (
         <ActivityIndicator color="#6C5CE7" style={{ marginTop: 60 }} />
@@ -324,6 +367,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#F0EFF8',
   },
   stripText: { fontSize: 12, color: '#6C5CE7', fontWeight: '600' },
+  notifBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#FFFBEB',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDE68A',
+  },
+  notifBannerText: { flex: 1, fontSize: 11, color: '#D97706', fontWeight: '600' },
   list: { padding: 16, paddingBottom: 120 },
   card: {
     backgroundColor: '#FFFFFF',

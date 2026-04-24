@@ -2,8 +2,9 @@ import { Stack } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { useState, useEffect } from 'react';
-import { View, Platform, AppState } from 'react-native';
+import { View, Platform, AppState, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as SecureStore from 'expo-secure-store';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
@@ -62,6 +63,31 @@ function AppShell() {
           finalStatus = status;
         }
         if (finalStatus !== 'granted') return;
+
+        // On Android, ask user to exempt us from battery optimization (once).
+        // Without this, Doze mode can delay or kill exact alarms when screen is off.
+        if (Platform.OS === 'android') {
+          const asked = await SecureStore.getItemAsync('battery_opt_asked');
+          if (!asked) {
+            await SecureStore.setItemAsync('battery_opt_asked', '1');
+            Alert.alert(
+              'Allow background alerts',
+              'For reminders to pop up when your screen is off, please tap "Allow" on the next screen.',
+              [{
+                text: 'Continue',
+                onPress: async () => {
+                  try {
+                    const IntentLauncher = require('expo-intent-launcher');
+                    await IntentLauncher.startActivityAsync(
+                      'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+                      { data: 'package:com.remindercompanion.app' },
+                    );
+                  } catch {}
+                },
+              }],
+            );
+          }
+        }
 
         const token = await tokenStore.getAccess();
         if (!token) return;

@@ -97,9 +97,17 @@ export class RemindersService {
       .where('r.userId = :userId', { userId })
       .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
       .andWhere(
-        // Show reminders scheduled for today OR active reminders with no scheduled time (anytime reminders)
-        '(r.scheduledAt BETWEEN :start AND :end OR r.scheduledAt IS NULL)',
-        { start, end },
+        // Include:
+        // 1. Reminders scheduled for a time window today (upcoming or missed)
+        // 2. Anytime reminders (no scheduledAt)
+        // 3. Recurring reminders whose scheduledAt has already been advanced to tomorrow
+        //    but which fired today — so the user can see "done today" status
+        `(
+          r.scheduledAt BETWEEN :start AND :end
+          OR r.scheduledAt IS NULL
+          OR (r.recurrence != :none AND r.lastFiredAt BETWEEN :start AND :end)
+        )`,
+        { start, end, none: RecurrenceType.NONE },
       )
       .orderBy('r.scheduledAt', 'ASC', 'NULLS LAST')
       .getMany();

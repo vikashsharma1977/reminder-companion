@@ -106,6 +106,7 @@ export class RemindersService {
           r.scheduledAt BETWEEN :start AND :end
           OR r.scheduledAt IS NULL
           OR (r.recurrence != :none AND r.lastFiredAt BETWEEN :start AND :end)
+          OR (r.recurrence != :none AND r.scheduledAt < :start)
         )`,
         { start, end, none: RecurrenceType.NONE },
       )

@@ -18,21 +18,34 @@ import { Ionicons } from '@expo/vector-icons';
 import { remindersApi } from '../../src/api/client';
 import { suppressFiringReminder } from '../../src/hooks/useNotifications';
 import { cancelLocalReminder } from '../../src/utils/localNotifications';
+import * as IntentLauncher from 'expo-intent-launcher';
+
+const PKG = 'package:com.remindercompanion.app';
+
+async function openAppSettings() {
+  if (Platform.OS !== 'android') return;
+  // Opens this app's info page — user can find Battery → Unrestricted there
+  await IntentLauncher.startActivityAsync(
+    'android.settings.APPLICATION_DETAILS_SETTINGS',
+    { data: PKG },
+  ).catch(() => {});
+}
+
+async function openOverlaySettings() {
+  if (Platform.OS !== 'android') return;
+  await IntentLauncher.startActivityAsync(
+    'android.settings.action.MANAGE_OVERLAY_PERMISSION',
+    { data: PKG },
+  ).catch(() => openAppSettings());
+}
 
 async function openBatterySettings() {
   if (Platform.OS !== 'android') return;
-  try {
-    const IL = require('expo-intent-launcher');
-    await IL.startActivityAsync(
-      'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-      { data: 'package:com.remindercompanion.app' },
-    );
-  } catch {
-    try {
-      const IL = require('expo-intent-launcher');
-      await IL.startActivityAsync('android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS');
-    } catch {}
-  }
+  // Try the direct per-app battery exemption dialog first
+  IntentLauncher.startActivityAsync(
+    'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+    { data: PKG },
+  ).catch(() => openAppSettings()); // fallback: app info page, tap Battery → Unrestricted
 }
 
 function NotifBanner() {
@@ -42,17 +55,42 @@ function NotifBanner() {
       style={styles.notifBanner}
       onPress={() =>
         Alert.alert(
-          'Background alerts',
-          'Allow this app to ignore battery optimizations so reminders fire even when your screen is off.',
+          'Enable background alerts',
+          'Two settings are needed for notifications when the screen is off:\n\n' +
+          '1. Battery → set to "Unrestricted"\n' +
+          '2. Display over other apps → enable',
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Open Settings', onPress: openBatterySettings },
+            {
+              text: 'Battery setting',
+              onPress: () =>
+                Alert.alert(
+                  'Battery setting',
+                  'Tap "Open App Settings", then tap Battery → select "Unrestricted".',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open App Settings', onPress: openBatterySettings },
+                  ],
+                ),
+            },
+            {
+              text: 'Overlay setting',
+              onPress: () =>
+                Alert.alert(
+                  'Display over other apps',
+                  'Enable "Allow display over other apps" so reminders can pop up over any screen.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open Settings', onPress: openOverlaySettings },
+                  ],
+                ),
+            },
           ],
         )
       }
     >
       <Ionicons name="notifications-off-outline" size={13} color="#D97706" />
-      <Text style={styles.notifBannerText}>Tap to enable alerts when screen is off</Text>
+      <Text style={styles.notifBannerText}>Tap to set up background alerts</Text>
       <Ionicons name="chevron-forward" size={13} color="#D97706" />
     </TouchableOpacity>
   );

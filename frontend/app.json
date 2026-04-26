@@ -42,7 +42,8 @@
         "SCHEDULE_EXACT_ALARM",
         "USE_EXACT_ALARM",
         "WAKE_LOCK",
-        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "SYSTEM_ALERT_WINDOW"
       ]
     },
     "plugins": [

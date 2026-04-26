@@ -43,11 +43,15 @@ function AppShell() {
     if (Platform.OS === 'web') return;
     (async () => {
       try {
-        // Android: high-importance channel so reminders show as heads-up banners
+        // Android: recreate the notification channel so sound + vibration settings
+        // are guaranteed correct. Android locks channel settings after first creation,
+        // so we delete then recreate to pick up any changes (e.g. adding sound).
         if (Platform.OS === 'android') {
+          try { await Notifications.deleteNotificationChannelAsync('reminders'); } catch {}
           await Notifications.setNotificationChannelAsync('reminders', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
+            sound: 'default',           // ← was missing; channel controls sound on Android 8+
             vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600],
             lightColor: '#6C5CE7',
             enableLights: true,

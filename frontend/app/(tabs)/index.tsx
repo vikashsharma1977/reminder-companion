@@ -19,12 +19,16 @@ import { remindersApi } from '../../src/api/client';
 import { suppressFiringReminder } from '../../src/hooks/useNotifications';
 import { cancelLocalReminder } from '../../src/utils/localNotifications';
 import * as IntentLauncher from 'expo-intent-launcher';
+import * as SecureStore from 'expo-secure-store';
 
 const PKG = 'package:com.remindercompanion.app';
+const BANNER_KEY = 'notif_banner_done_v1';
 
-async function openAppSettings() {
+// APPLICATION_DETAILS_SETTINGS is universally reliable on all ROMs.
+// REQUEST_IGNORE_BATTERY_OPTIMIZATIONS resolves (not rejects) on unsupported
+// ROMs so .catch() never fires — always use the app-settings path instead.
+async function openBatterySettings() {
   if (Platform.OS !== 'android') return;
-  // Opens this app's info page — user can find Battery → Unrestricted there
   await IntentLauncher.startActivityAsync(
     'android.settings.APPLICATION_DETAILS_SETTINGS',
     { data: PKG },
@@ -36,38 +40,50 @@ async function openOverlaySettings() {
   await IntentLauncher.startActivityAsync(
     'android.settings.action.MANAGE_OVERLAY_PERMISSION',
     { data: PKG },
-  ).catch(() => openAppSettings());
-}
-
-async function openBatterySettings() {
-  if (Platform.OS !== 'android') return;
-  // Try the direct per-app battery exemption dialog first
-  IntentLauncher.startActivityAsync(
-    'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
-    { data: PKG },
-  ).catch(() => openAppSettings()); // fallback: app info page, tap Battery → Unrestricted
+  ).catch(async () => {
+    await IntentLauncher.startActivityAsync(
+      'android.settings.APPLICATION_DETAILS_SETTINGS',
+      { data: PKG },
+    ).catch(() => {});
+  });
 }
 
 function NotifBanner() {
-  if (Platform.OS !== 'android') return null;
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') { setDismissed(true); return; }
+    SecureStore.getItemAsync(BANNER_KEY)
+      .then(v => setDismissed(v === '1'))
+      .catch(() => setDismissed(false));
+  }, []);
+
+  if (Platform.OS !== 'android' || dismissed !== false) return null;
+
+  const markDone = () => {
+    SecureStore.setItemAsync(BANNER_KEY, '1').catch(() => {});
+    setDismissed(true);
+  };
+
   const showSetup = () =>
     Alert.alert(
-      'Fix background alerts',
-      'Complete both steps to get reliable alerts:\n\n' +
-      '① Battery: Open App Settings → Battery → "Unrestricted"\n\n' +
-      '② Display: Settings → Apps → Special app access → Display over other apps → enable\n\n' +
-      'Samsung: also go to Battery → Background usage limits → Never sleeping apps → add this app.\n\n' +
-      'Xiaomi/MIUI: also enable Autostart for this app.',
+      'Background alert setup',
+      '① Tap "Battery" → on the next screen tap Battery → set to "Unrestricted"\n\n' +
+      '② Tap "Overlay" → enable "Allow display over other apps"\n\n' +
+      'Samsung: also Battery care → Background usage limits → Never sleeping apps.\n' +
+      'Xiaomi: also enable Autostart for this app.\n\n' +
+      'Tap "Done ✓" once you\'ve finished to hide this banner.',
       [
-        { text: 'Dismiss', style: 'cancel' },
-        { text: 'Open App Settings', onPress: openBatterySettings },
-        { text: 'Display over apps', onPress: openOverlaySettings },
+        { text: 'Battery', onPress: openBatterySettings },
+        { text: 'Overlay', onPress: openOverlaySettings },
+        { text: 'Done ✓', onPress: markDone },
       ],
     );
+
   return (
     <TouchableOpacity style={styles.notifBanner} onPress={showSetup}>
       <Ionicons name="notifications-off-outline" size={13} color="#D97706" />
-      <Text style={styles.notifBannerText}>Tap to set up background alerts (recommended)</Text>
+      <Text style={styles.notifBannerText}>Set up background alerts — tap to configure</Text>
       <Ionicons name="chevron-forward" size={13} color="#D97706" />
     </TouchableOpacity>
   );

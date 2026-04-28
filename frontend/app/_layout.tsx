@@ -98,10 +98,13 @@ function AppShell() {
                 {
                   text: 'Battery Setting',
                   onPress: () =>
+                    // APPLICATION_DETAILS_SETTINGS is universally reliable;
+                    // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS resolves silently
+                    // on unsupported ROMs so the .catch fallback never ran.
                     IntentLauncher.startActivityAsync(
-                      'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+                      'android.settings.APPLICATION_DETAILS_SETTINGS',
                       { data: 'package:com.remindercompanion.app' },
-                    ).catch(openAppDetail),
+                    ).catch(() => {}),
                 },
                 {
                   text: 'Overlay Setting',

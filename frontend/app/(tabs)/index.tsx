@@ -107,10 +107,12 @@ interface Reminder {
 }
 
 function firedToday(r: Reminder): boolean {
-  if (!r.lastFiredAt) return false;
-  // Non-recurring reminders only enter the done bucket if fully completed.
-  // Recurring ones enter when lastFiredAt is today (snooze clears lastFiredAt so that path is safe).
-  if (r.recurrence === 'none' && r.status !== 'completed') return false;
+  // Completed reminders: backend only returns them when lastFiredAt is today,
+  // so any completed reminder in the list belongs in the done section.
+  if (r.status === 'completed') return true;
+  // Recurring reminders: show as done when they fired today (snooze clears
+  // lastFiredAt to null so snoozed reminders still appear as upcoming).
+  if (!r.lastFiredAt || r.recurrence === 'none') return false;
   const fired = new Date(r.lastFiredAt);
   const now = new Date();
   return fired.getFullYear() === now.getFullYear() &&
@@ -254,6 +256,16 @@ export default function TodayScreen() {
     onSuccess: (_data, id) => {
       suppressFiringReminder(id);
       cancelLocalReminder(id).catch(() => {});
+      // Optimistically mark completed in cache so the reminder moves to the
+      // done section immediately without waiting for a refetch.
+      qc.setQueryData(['reminders', 'today'], (old: Reminder[] | undefined) => {
+        if (!old) return old;
+        return old.map((r) =>
+          r.id === id
+            ? { ...r, status: 'completed', lastFiredAt: new Date().toISOString() }
+            : r,
+        );
+      });
       qc.invalidateQueries({ queryKey: ['reminders'] });
     },
   });

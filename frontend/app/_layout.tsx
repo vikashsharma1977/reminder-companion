@@ -74,58 +74,45 @@ function AppShell() {
         }
         if (finalStatus !== 'granted') return;
 
-        // Android: two-step setup for reliable background notifications.
-        // Battery exemption prevents Doze from blocking exact alarms.
-        // Overlay permission lets the modal appear over any other app.
+        // Android: one-time setup for reliable background notifications.
         // Key versioned so fixed builds re-prompt users who saw broken dialogs.
         if (Platform.OS === 'android') {
-          const asked = await SecureStore.getItemAsync('notif_setup_v3');
+          const asked = await SecureStore.getItemAsync('notif_setup_v4');
           if (!asked) {
-            await SecureStore.setItemAsync('notif_setup_v3', '1');
+            await SecureStore.setItemAsync('notif_setup_v4', '1');
 
-            const openAppDetailSettings = () =>
+            const openAppDetail = () =>
               IntentLauncher.startActivityAsync(
                 'android.settings.APPLICATION_DETAILS_SETTINGS',
                 { data: 'package:com.remindercompanion.app' },
               ).catch(() => {});
 
-            // Step 1: battery optimization
             Alert.alert(
-              'Step 1 of 2 — Battery',
-              'For reliable reminders when screen is off:\n\nTap "Open Settings", then tap Battery → set to "Unrestricted".',
+              'Enable background alerts',
+              'Two quick steps so reminders fire even when your screen is off:\n\n' +
+              '① Tap "Battery Setting" → set Battery to "Unrestricted"\n\n' +
+              '② Tap "Overlay Setting" → enable "Display over other apps"\n\n' +
+              'Samsung users: also add this app to Battery → Never sleeping apps.',
               [
-                { text: 'Skip', style: 'cancel' },
+                { text: 'Later', style: 'cancel' },
                 {
-                  text: 'Open Settings',
-                  onPress: () => {
+                  text: 'Battery Setting',
+                  onPress: () =>
                     IntentLauncher.startActivityAsync(
                       'android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
                       { data: 'package:com.remindercompanion.app' },
-                    ).catch(openAppDetailSettings);
-                  },
+                    ).catch(openAppDetail),
+                },
+                {
+                  text: 'Overlay Setting',
+                  onPress: () =>
+                    IntentLauncher.startActivityAsync(
+                      'android.settings.action.MANAGE_OVERLAY_PERMISSION',
+                      { data: 'package:com.remindercompanion.app' },
+                    ).catch(openAppDetail),
                 },
               ],
             );
-
-            // Step 2: overlay permission (small delay so alerts don't stack)
-            setTimeout(() => {
-              Alert.alert(
-                'Step 2 of 2 — Display over apps',
-                'Enable "Allow display over other apps" so reminders pop up over any screen.',
-                [
-                  { text: 'Skip', style: 'cancel' },
-                  {
-                    text: 'Open Settings',
-                    onPress: () => {
-                      IntentLauncher.startActivityAsync(
-                        'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-                        { data: 'package:com.remindercompanion.app' },
-                      ).catch(openAppDetailSettings);
-                    },
-                  },
-                ],
-              );
-            }, 500);
           }
         }
 

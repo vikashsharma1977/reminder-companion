@@ -50,47 +50,24 @@ async function openBatterySettings() {
 
 function NotifBanner() {
   if (Platform.OS !== 'android') return null;
+  const showSetup = () =>
+    Alert.alert(
+      'Fix background alerts',
+      'Complete both steps to get reliable alerts:\n\n' +
+      '① Battery: Open App Settings → Battery → "Unrestricted"\n\n' +
+      '② Display: Settings → Apps → Special app access → Display over other apps → enable\n\n' +
+      'Samsung: also go to Battery → Background usage limits → Never sleeping apps → add this app.\n\n' +
+      'Xiaomi/MIUI: also enable Autostart for this app.',
+      [
+        { text: 'Dismiss', style: 'cancel' },
+        { text: 'Open App Settings', onPress: openBatterySettings },
+        { text: 'Display over apps', onPress: openOverlaySettings },
+      ],
+    );
   return (
-    <TouchableOpacity
-      style={styles.notifBanner}
-      onPress={() =>
-        Alert.alert(
-          'Enable background alerts',
-          'Two settings are needed for notifications when the screen is off:\n\n' +
-          '1. Battery → set to "Unrestricted"\n' +
-          '2. Display over other apps → enable',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Battery setting',
-              onPress: () =>
-                Alert.alert(
-                  'Battery setting',
-                  'Tap "Open App Settings", then tap Battery → select "Unrestricted".',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open App Settings', onPress: openBatterySettings },
-                  ],
-                ),
-            },
-            {
-              text: 'Overlay setting',
-              onPress: () =>
-                Alert.alert(
-                  'Display over other apps',
-                  'Enable "Allow display over other apps" so reminders can pop up over any screen.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'Open Settings', onPress: openOverlaySettings },
-                  ],
-                ),
-            },
-          ],
-        )
-      }
-    >
+    <TouchableOpacity style={styles.notifBanner} onPress={showSetup}>
       <Ionicons name="notifications-off-outline" size={13} color="#D97706" />
-      <Text style={styles.notifBannerText}>Tap to set up background alerts</Text>
+      <Text style={styles.notifBannerText}>Tap to set up background alerts (recommended)</Text>
       <Ionicons name="chevron-forward" size={13} color="#D97706" />
     </TouchableOpacity>
   );
@@ -115,6 +92,8 @@ interface Reminder {
 
 function firedToday(r: Reminder): boolean {
   if (!r.lastFiredAt || r.recurrence === 'none') return false;
+  // Snoozed reminders have a future scheduledAt — treat as upcoming, not done
+  if (r.scheduledAt && new Date(r.scheduledAt) > new Date()) return false;
   const fired = new Date(r.lastFiredAt);
   const now = new Date();
   return fired.getFullYear() === now.getFullYear() &&

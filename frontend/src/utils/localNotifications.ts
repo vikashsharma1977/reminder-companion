@@ -32,7 +32,7 @@ export async function scheduleLocalReminder(reminder: {
       data: { reminderId: reminder.id },
       // Must reference the high-importance channel so Android shows heads-up banners
       // over other apps. Without this it falls back to the default low-importance channel.
-      ...(Platform.OS === 'android' && { channelId: 'reminders_v2' }),
+      ...(Platform.OS === 'android' && { channelId: 'reminders_v3' }),
     },
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -78,7 +78,7 @@ export async function syncLocalNotifications(reminders: Array<{
         body: r.notes ?? 'Time for your reminder!',
         sound: true,
         data: { reminderId: r.id },
-        ...(Platform.OS === 'android' && { channelId: 'reminders_v2' }),
+        ...(Platform.OS === 'android' && { channelId: 'reminders_v3' }),
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,

@@ -55,7 +55,7 @@ function AppShell() {
         // so bumping the ID is the only safe way to change them.
         // reminders_v2 adds sound:'default' which was missing from reminders.
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('reminders_v2', {
+          await Notifications.setNotificationChannelAsync('reminders_v3', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
             sound: 'default',
@@ -66,8 +66,9 @@ function AppShell() {
             showBadge: true,
             lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           });
-          // Silently remove old soundless channel (best-effort)
+          // Silently remove old channels (best-effort)
           Notifications.deleteNotificationChannelAsync('reminders').catch(() => {});
+          Notifications.deleteNotificationChannelAsync('reminders_v2').catch(() => {});
         }
 
         const { status: existing } = await Notifications.getPermissionsAsync();

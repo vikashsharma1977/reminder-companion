@@ -21,7 +21,11 @@ Notifications.setNotificationHandler({
     const inForeground = AppState.currentState === 'active';
     return {
       shouldShowAlert: true,
-      shouldPlaySound: !inForeground, // foreground: modal plays custom sound
+      // Always play sound — channel sound/vibration must never be suppressed.
+      // On Android, the channel controls the actual audio; returning false here
+      // silences it even when the channel has sound configured.
+      // In the foreground the modal provides the visual UX; one system sound is fine.
+      shouldPlaySound: true,
       shouldSetBadge: true,
       shouldShowBanner: !inForeground, // foreground: modal; background: OS heads-up banner
       shouldShowList: true,

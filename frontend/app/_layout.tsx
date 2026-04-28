@@ -11,18 +11,22 @@ import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
 import { syncLocalNotifications } from '../src/utils/localNotifications';
 
-// When the app is in the FOREGROUND our own NotificationModal handles the UX
-// (custom sound via expo-av, snooze/done buttons). Suppress the OS banner and
-// sound here to avoid a double alert. Background/locked: the OS channel handles
-// everything and this handler is never called.
+// setNotificationHandler is called whenever a notification arrives while the
+// app process is alive — including when the app is in the background (user on
+// another app or phone locked). We must return shouldShowBanner:true in that
+// case so Android shows the heads-up banner. Only suppress it when the app is
+// actually in the foreground, where our own NotificationModal handles the UX.
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,   // keep in notification centre list
-    shouldPlaySound: false,  // modal plays custom sound; no duplicate OS beep
-    shouldSetBadge: true,
-    shouldShowBanner: false, // no OS banner on top of our modal
-    shouldShowList: true,
-  }),
+  handleNotification: async () => {
+    const inForeground = AppState.currentState === 'active';
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: !inForeground, // foreground: modal plays custom sound
+      shouldSetBadge: true,
+      shouldShowBanner: !inForeground, // foreground: modal; background: OS heads-up banner
+      shouldShowList: true,
+    };
+  },
 });
 
 const queryClient = new QueryClient({

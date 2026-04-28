@@ -108,8 +108,9 @@ interface Reminder {
 
 function firedToday(r: Reminder): boolean {
   if (!r.lastFiredAt || r.recurrence === 'none') return false;
-  // Snoozed reminders have a future scheduledAt — treat as upcoming, not done
-  if (r.scheduledAt && new Date(r.scheduledAt) > new Date()) return false;
+  // No scheduledAt guard needed: snooze now clears lastFiredAt to null, so
+  // snoozed reminders already return false above. The old guard was incorrectly
+  // hiding completed recurring reminders (scheduledAt advanced to tomorrow).
   const fired = new Date(r.lastFiredAt);
   const now = new Date();
   return fired.getFullYear() === now.getFullYear() &&

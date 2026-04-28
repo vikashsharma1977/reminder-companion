@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
@@ -9,13 +9,61 @@ import { CreateReminderDto } from './dto/create-reminder.dto';
 export const SNOOZE_MINUTES = 10;
 
 @Injectable()
-export class RemindersService {
+export class RemindersService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(RemindersService.name);
+
   constructor(
     @InjectRepository(Reminder)
     private readonly reminderRepo: Repository<Reminder>,
     @InjectQueue('reminders')
     private readonly reminderQueue: Queue,
   ) {}
+
+  // On every backend start, advance recurring reminders whose scheduledAt
+  // fell behind due to backend downtime or Bull queue losses.
+  async onApplicationBootstrap(): Promise<void> {
+    try {
+      const now = new Date();
+      const stale = await this.reminderRepo
+        .createQueryBuilder('r')
+        .where('r.status = :status', { status: ReminderStatus.ACTIVE })
+        .andWhere('r.recurrence != :none', { none: RecurrenceType.NONE })
+        .andWhere('r.scheduledAt < :now', { now })
+        .getMany();
+
+      for (const reminder of stale) {
+        await this.advanceToNextOccurrence(reminder);
+      }
+      if (stale.length > 0) {
+        this.logger.log(`Repaired ${stale.length} stale recurring reminder(s)`);
+      }
+    } catch (err) {
+      this.logger.error('Failed to repair stale recurring reminders', err);
+    }
+  }
+
+  private async advanceToNextOccurrence(reminder: Reminder): Promise<void> {
+    if (!reminder.scheduledAt) return;
+    const now = new Date();
+    let nextAt = new Date(reminder.scheduledAt);
+
+    while (nextAt <= now) {
+      if (reminder.recurrence === RecurrenceType.DAILY) {
+        nextAt = new Date(nextAt.getTime() + 24 * 60 * 60 * 1000);
+      } else if (reminder.recurrence === RecurrenceType.WEEKLY) {
+        nextAt = new Date(nextAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+      } else {
+        return;
+      }
+    }
+
+    await this.reminderRepo.update(reminder.id, { scheduledAt: nextAt });
+    const delay = nextAt.getTime() - Date.now();
+    if (delay > 0) {
+      await this.reminderQueue.add('fire', { reminderId: reminder.id }, { delay });
+      this.logger.log(`Advanced stale reminder "${reminder.title}" → ${nextAt.toISOString()}`);
+    }
+  }
 
   async create(userId: string, dto: CreateReminderDto): Promise<Reminder> {
     const reminder = this.reminderRepo.create({ ...dto, userId });
@@ -97,16 +145,14 @@ export class RemindersService {
       .where('r.userId = :userId', { userId })
       .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
       .andWhere(
-        // Include:
-        // 1. Reminders scheduled for a time window today (upcoming or missed)
-        // 2. Anytime reminders (no scheduledAt)
-        // 3. Recurring reminders whose scheduledAt has already been advanced to tomorrow
-        //    but which fired today — so the user can see "done today" status
+        // 1. Scheduled for today
+        // 2. Anytime (no scheduledAt)
+        // 3. Recurring and already fired today (scheduledAt was advanced to tomorrow
+        //    by the processor, but we still want "done today" visible)
         `(
           r.scheduledAt BETWEEN :start AND :end
           OR r.scheduledAt IS NULL
           OR (r.recurrence != :none AND r.lastFiredAt BETWEEN :start AND :end)
-          OR (r.recurrence != :none AND r.scheduledAt < :start)
         )`,
         { start, end, none: RecurrenceType.NONE },
       )

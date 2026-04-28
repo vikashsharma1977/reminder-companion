@@ -11,13 +11,16 @@ import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
 import { syncLocalNotifications } from '../src/utils/localNotifications';
 
-// Show alerts for foreground notifications (iOS especially)
+// When the app is in the FOREGROUND our own NotificationModal handles the UX
+// (custom sound via expo-av, snooze/done buttons). Suppress the OS banner and
+// sound here to avoid a double alert. Background/locked: the OS channel handles
+// everything and this handler is never called.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
+    shouldShowAlert: true,   // keep in notification centre list
+    shouldPlaySound: false,  // modal plays custom sound; no duplicate OS beep
     shouldSetBadge: true,
-    shouldShowBanner: true,
+    shouldShowBanner: false, // no OS banner on top of our modal
     shouldShowList: true,
   }),
 });
@@ -43,15 +46,15 @@ function AppShell() {
     if (Platform.OS === 'web') return;
     (async () => {
       try {
-        // Android: recreate the notification channel so sound + vibration settings
+        // Android: use a versioned channel ID so that sound/vibration settings
         // are guaranteed correct. Android locks channel settings after first creation,
-        // so we delete then recreate to pick up any changes (e.g. adding sound).
+        // so bumping the ID is the only safe way to change them.
+        // reminders_v2 adds sound:'default' which was missing from reminders.
         if (Platform.OS === 'android') {
-          try { await Notifications.deleteNotificationChannelAsync('reminders'); } catch {}
-          await Notifications.setNotificationChannelAsync('reminders', {
+          await Notifications.setNotificationChannelAsync('reminders_v2', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
-            sound: 'default',           // ← was missing; channel controls sound on Android 8+
+            sound: 'default',
             vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600],
             lightColor: '#6C5CE7',
             enableLights: true,
@@ -59,6 +62,8 @@ function AppShell() {
             showBadge: true,
             lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           });
+          // Silently remove old soundless channel (best-effort)
+          Notifications.deleteNotificationChannelAsync('reminders').catch(() => {});
         }
 
         const { status: existing } = await Notifications.getPermissionsAsync();

@@ -62,7 +62,7 @@ export class NotificationsService {
         data: payload.data ?? {},
         sound: 'default',
         priority: 'high',
-        channelId: 'reminders',
+        channelId: 'reminders_v2',
         badge: payload.badge ?? 1,
         // Android: keep notification visible until user explicitly dismisses
         sticky: false,

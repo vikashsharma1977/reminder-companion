@@ -100,12 +100,10 @@ export class RemindersService implements OnApplicationBootstrap {
 
   async markCompleted(userId: string, id: string): Promise<Reminder> {
     const reminder = await this.findOne(userId, id);
-    const isRecurring = reminder.recurrence !== RecurrenceType.NONE;
-    if (isRecurring) {
-      // For recurring reminders, just stamp lastFiredAt — the processor already
-      // moved scheduledAt to the next occurrence, so it won't show in today's list.
-      reminder.lastFiredAt = new Date();
-    } else {
+    // Always stamp lastFiredAt so the reminder appears in today's done list
+    // regardless of recurrence type.
+    reminder.lastFiredAt = new Date();
+    if (reminder.recurrence === RecurrenceType.NONE) {
       reminder.status = ReminderStatus.COMPLETED;
     }
     return this.reminderRepo.save(reminder);
@@ -146,18 +144,18 @@ export class RemindersService implements OnApplicationBootstrap {
     return this.reminderRepo
       .createQueryBuilder('r')
       .where('r.userId = :userId', { userId })
-      .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
       .andWhere(
-        // 1. Scheduled for today
-        // 2. Anytime (no scheduledAt)
-        // 3. Recurring and already fired today (scheduledAt was advanced to tomorrow
-        //    by the processor, but we still want "done today" visible)
+        // Active reminders scheduled today, anytime, or recurring that fired today.
+        // Completed reminders that fired today (non-recurring Done) also included.
         `(
-          r.scheduledAt BETWEEN :start AND :end
-          OR r.scheduledAt IS NULL
-          OR (r.recurrence != :none AND r.lastFiredAt BETWEEN :start AND :end)
+          (r.status = :active AND (
+            r.scheduledAt BETWEEN :start AND :end
+            OR r.scheduledAt IS NULL
+            OR (r.recurrence != :none AND r.lastFiredAt BETWEEN :start AND :end)
+          ))
+          OR (r.status = :completed AND r.lastFiredAt BETWEEN :start AND :end)
         )`,
-        { start, end, none: RecurrenceType.NONE },
+        { active: ReminderStatus.ACTIVE, completed: ReminderStatus.COMPLETED, start, end, none: RecurrenceType.NONE },
       )
       .orderBy('r.scheduledAt', 'ASC', 'NULLS LAST')
       .getMany();

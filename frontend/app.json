@@ -83,6 +83,15 @@
         }
       ]
     ],
+    "updates": {
+      "url": "https://u.expo.dev/d7babc87-33c6-4d6d-9a7e-abf74b5a1b9c",
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
     "experiments": {
       "typedRoutes": true
     },

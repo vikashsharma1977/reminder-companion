@@ -57,12 +57,13 @@ function AppShell() {
         // Android: use a versioned channel ID so that sound/vibration settings
         // are guaranteed correct. Android locks channel settings after first creation,
         // so bumping the ID is the only safe way to change them.
-        // reminders_v2 adds sound:'default' which was missing from reminders.
+        // reminders_v4: use explicit 'chime' file instead of 'default' — some ROMs
+        // resolve sound:'default' as no sound, so we reference the compiled-in file.
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('reminders_v3', {
+          await Notifications.setNotificationChannelAsync('reminders_v4', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
-            sound: 'default',
+            sound: 'chime',
             vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600],
             lightColor: '#6C5CE7',
             enableLights: true,
@@ -73,6 +74,7 @@ function AppShell() {
           // Silently remove old channels (best-effort)
           Notifications.deleteNotificationChannelAsync('reminders').catch(() => {});
           Notifications.deleteNotificationChannelAsync('reminders_v2').catch(() => {});
+          Notifications.deleteNotificationChannelAsync('reminders_v3').catch(() => {});
         }
 
         const { status: existing } = await Notifications.getPermissionsAsync();

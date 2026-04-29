@@ -75,6 +75,35 @@ function AppShell() {
           Notifications.deleteNotificationChannelAsync('reminders').catch(() => {});
           Notifications.deleteNotificationChannelAsync('reminders_v2').catch(() => {});
           Notifications.deleteNotificationChannelAsync('reminders_v3').catch(() => {});
+
+          // One-time migration: reschedule all existing notifications onto reminders_v4
+          // so they get chime sound even without a new backend deploy.
+          SecureStore.getItemAsync('notif_v4_migrated').then(async (done) => {
+            if (done) return;
+            try {
+              const list = await Notifications.getAllScheduledNotificationsAsync();
+              for (const n of list) {
+                const t = n.trigger as any;
+                const ms: number | null = t?.value ?? t?.timestamp ?? null;
+                if (!ms || ms <= Date.now()) continue;
+                await Notifications.scheduleNotificationAsync({
+                  identifier: n.identifier,
+                  content: {
+                    title: n.content.title ?? '',
+                    body: n.content.body ?? '',
+                    sound: true,
+                    data: (n.content.data as any) ?? {},
+                    channelId: 'reminders_v4',
+                  },
+                  trigger: {
+                    type: Notifications.SchedulableTriggerInputTypes.DATE,
+                    date: new Date(ms),
+                  },
+                });
+              }
+            } catch {}
+            SecureStore.setItemAsync('notif_v4_migrated', '1').catch(() => {});
+          }).catch(() => {});
         }
 
         const { status: existing } = await Notifications.getPermissionsAsync();

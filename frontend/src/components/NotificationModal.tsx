@@ -90,6 +90,17 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
     mutationFn: ({ id, minutes }: { id: string; minutes: number }) =>
       remindersApi.snooze(id, minutes),
     onSuccess: (res, { id }) => {
+      // Optimistically update today cache so the reminder immediately moves
+      // from the "done today" bucket back to upcoming with the new snoozed time,
+      // without waiting for the server refetch to complete.
+      qc.setQueryData(['reminders', 'today'], (old: any[] | undefined) => {
+        if (!old) return old;
+        return old.map((r: any) =>
+          r.id === id
+            ? { ...r, scheduledAt: res.data.scheduledAt, lastFiredAt: null, status: 'active' }
+            : r,
+        );
+      });
       // Reschedule local notification for the new snoozed time
       cancelLocalReminder(id)
         .then(() => scheduleLocalReminder(res.data))

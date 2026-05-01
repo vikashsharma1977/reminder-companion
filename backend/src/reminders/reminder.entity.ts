@@ -98,7 +98,7 @@ export class Reminder {
   missedCount: number;
 
   @Column({ type: 'timestamptz', nullable: true })
-  lastFiredAt: Date;
+  lastFiredAt: Date | null;
 
   @Column({ nullable: true })
   sourceType: string; // 'voice' | 'text' | 'ocr' | 'manual'

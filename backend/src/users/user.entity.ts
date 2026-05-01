@@ -47,6 +47,10 @@ export class User {
   @Column({ nullable: true })
   fcmToken: string;
 
+  // GDPR Art. 7 — timestamp proving the user gave explicit consent at registration
+  @Column({ type: 'timestamptz', nullable: true })
+  consentGivenAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

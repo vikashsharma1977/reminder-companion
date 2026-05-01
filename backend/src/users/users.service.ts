@@ -22,8 +22,12 @@ export class UsersService {
     if (existing) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = this.userRepo.create({ email, passwordHash, displayName });
+    const user = this.userRepo.create({ email, passwordHash, displayName, consentGivenAt: new Date() });
     return this.userRepo.save(user);
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    await this.userRepo.delete(userId);
   }
 
   async findByEmail(email: string): Promise<User | null> {

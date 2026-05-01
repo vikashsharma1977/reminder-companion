@@ -106,6 +106,8 @@ interface Reminder {
   status: string;
 }
 
+type EnrichedReminder = Reminder & { doneToday: boolean };
+
 function firedToday(r: Reminder): boolean {
   // Completed reminders: backend only returns them when lastFiredAt is today,
   // so any completed reminder in the list belongs in the done section.
@@ -131,10 +133,9 @@ function formatTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function ReminderCard({ item, onDone }: { item: Reminder; onDone: () => void }) {
+function ReminderCard({ item, doneToday, onDone }: { item: Reminder; doneToday: boolean; onDone: () => void }) {
   const cfg = CATEGORY_CONFIG[item.category] ?? CATEGORY_CONFIG.other;
   const isPast = !!(item.scheduledAt && new Date(item.scheduledAt) < new Date());
-  const doneToday = firedToday(item);
   const isMissed = isPast && !doneToday;
 
   // Pulse animation for missed reminders
@@ -270,16 +271,12 @@ export default function TodayScreen() {
     },
   });
 
-  const allReminders = data ?? [];
-  const doneReminders = allReminders.filter(firedToday);
-  const activeReminders = allReminders.filter((r) => !firedToday(r));
-  const missedReminders = activeReminders.filter(
-    (r) => r.scheduledAt && new Date(r.scheduledAt) < new Date(),
-  );
-  const upcomingReminders = activeReminders.filter(
-    (r) => !r.scheduledAt || new Date(r.scheduledAt) >= new Date(),
-  );
-  const pendingReminders = activeReminders; // total not-done-today count
+  const now = new Date();
+  const allReminders: EnrichedReminder[] = (data ?? []).map(r => ({ ...r, doneToday: firedToday(r) }));
+  const doneReminders = allReminders.filter(r => r.doneToday);
+  const activeReminders = allReminders.filter(r => !r.doneToday);
+  const missedReminders = activeReminders.filter(r => r.scheduledAt && new Date(r.scheduledAt) < now);
+  const upcomingReminders = activeReminders.filter(r => !r.scheduledAt || new Date(r.scheduledAt) >= now);
   // Order: upcoming → missed (draws attention) → done today
   const reminders = [...upcomingReminders, ...missedReminders, ...doneReminders];
 
@@ -290,7 +287,7 @@ export default function TodayScreen() {
     }
     prevMissedCountRef.current = missedReminders.length;
   }, [missedReminders.length]);
-  const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  const today = now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 
   return (
     <View style={styles.container}>
@@ -301,7 +298,7 @@ export default function TodayScreen() {
           <Text style={styles.date}>{today}</Text>
         </View>
         <View style={styles.countBubble}>
-          <Text style={styles.countText}>{pendingReminders.length}</Text>
+          <Text style={styles.countText}>{activeReminders.length}</Text>
         </View>
       </View>
 
@@ -310,8 +307,8 @@ export default function TodayScreen() {
         <View style={styles.strip}>
           <Ionicons name="checkmark-circle-outline" size={14} color="#6C5CE7" />
           <Text style={styles.stripText}>
-            {pendingReminders.length > 0
-              ? `${pendingReminders.length} remaining${doneReminders.length > 0 ? ` · ${doneReminders.length} done today` : ''}`
+            {activeReminders.length > 0
+              ? `${activeReminders.length} remaining${doneReminders.length > 0 ? ` · ${doneReminders.length} done today` : ''}`
               : 'All done for today!'}
           </Text>
         </View>
@@ -338,6 +335,7 @@ export default function TodayScreen() {
           renderItem={({ item }) => (
             <ReminderCard
               item={item}
+              doneToday={item.doneToday}
               onDone={() => completeMutation.mutate(item.id)}
             />
           )}
@@ -438,7 +436,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  cardPast: { opacity: 0.65 },
   cardMissed: { borderWidth: 1, borderColor: '#FECACA' },
   cardDoneToday: { opacity: 0.6 },
   cardTitleDone: { textDecorationLine: 'line-through', color: '#9CA3AF' },

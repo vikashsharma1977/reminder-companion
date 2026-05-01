@@ -1,5 +1,6 @@
 import {
   IsEmail, IsString, MinLength, MaxLength, IsOptional, Matches, Length,
+  IsBoolean, Equals,
 } from 'class-validator';
 
 export class RegisterDto {
@@ -15,6 +16,10 @@ export class RegisterDto {
   @IsString()
   @MaxLength(100)
   displayName?: string;
+
+  @IsBoolean()
+  @Equals(true, { message: 'You must accept the privacy policy to register' })
+  privacyPolicyAccepted: boolean;
 }
 
 export class LoginDto {

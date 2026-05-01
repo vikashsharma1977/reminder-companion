@@ -121,7 +121,7 @@ export class RemindersService implements OnApplicationBootstrap {
     reminder.status = ReminderStatus.ACTIVE;
     // Clear lastFiredAt so the reminder shows as upcoming (not "Done for today")
     // until it actually fires again at the snoozed time.
-    reminder.lastFiredAt = null as any;
+    reminder.lastFiredAt = null;
     const saved = await this.reminderRepo.save(reminder);
 
     const delay = newTime.getTime() - Date.now();

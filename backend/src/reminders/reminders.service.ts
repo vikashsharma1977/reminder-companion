@@ -79,10 +79,14 @@ export class RemindersService implements OnApplicationBootstrap {
     return saved;
   }
 
-  async findAllForUser(userId: string): Promise<Reminder[]> {
+  async findAllForUser(userId: string, page = 1, limit = 100): Promise<Reminder[]> {
+    const take = Math.min(limit, 200);
+    const skip = (Math.max(page, 1) - 1) * take;
     return this.reminderRepo.find({
       where: { userId, status: ReminderStatus.ACTIVE },
       order: { scheduledAt: 'ASC' },
+      take,
+      skip,
     });
   }
 

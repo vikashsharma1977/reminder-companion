@@ -34,11 +34,19 @@ import { envValidationSchema } from './config/env.validation';
           synchronize: config.get('NODE_ENV') !== 'production',
           logging: config.get('NODE_ENV') === 'development',
         };
+        const pool = {
+          extra: {
+            max: 20,                       // connection pool ceiling
+            idleTimeoutMillis: 30_000,     // reclaim idle connections after 30 s
+            connectionTimeoutMillis: 5_000, // fail fast if DB unreachable
+          },
+        };
         if (databaseUrl) {
-          return { ...base, url: databaseUrl, ssl: { rejectUnauthorized: false } };
+          return { ...base, ...pool, url: databaseUrl, ssl: { rejectUnauthorized: false } };
         }
         return {
           ...base,
+          ...pool,
           host: config.get<string>('DB_HOST'),
           port: config.get<number>('DB_PORT'),
           username: config.get<string>('DB_USER'),

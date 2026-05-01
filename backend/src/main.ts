@@ -22,7 +22,7 @@ async function bootstrap() {
   app.enableCors({
     // React Native and server-to-server callers send no Origin header — always allow.
     // Browser clients must be in the ALLOWED_ORIGINS whitelist.
-    origin: (origin, callback) => {
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin) return callback(null, true);
       const allowed = (process.env.ALLOWED_ORIGINS ?? '').split(',').filter(Boolean);
       if (allowed.includes(origin)) return callback(null, true);

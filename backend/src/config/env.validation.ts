@@ -5,19 +5,32 @@ export const envValidationSchema = Joi.object({
 
   // Crash at startup if missing — no silent fallback
   JWT_SECRET: Joi.string().min(32).required(),
-  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
 
   PORT: Joi.number().default(3001),
   FRONTEND_URL: Joi.string().uri().default('http://localhost:8081'),
   ALLOWED_ORIGINS: Joi.string().default('http://localhost:8081'),
 
-  // Railway provides DATABASE_URL; individual vars are used for local dev
+  // Railway provides DATABASE_URL; individual vars are used for local dev.
+  // When DATABASE_URL is absent, the individual vars are required so the
+  // server never starts without a valid DB config.
   DATABASE_URL: Joi.string().optional().allow(''),
   DB_HOST: Joi.string().default('localhost'),
   DB_PORT: Joi.number().default(5432),
-  DB_USER: Joi.string().optional(),
-  DB_PASS: Joi.string().optional(),
-  DB_NAME: Joi.string().optional(),
+  DB_USER: Joi.when('DATABASE_URL', {
+    is: Joi.string().min(1).required(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
+  DB_PASS: Joi.when('DATABASE_URL', {
+    is: Joi.string().min(1).required(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
+  DB_NAME: Joi.when('DATABASE_URL', {
+    is: Joi.string().min(1).required(),
+    then: Joi.string().optional(),
+    otherwise: Joi.string().required(),
+  }),
 
   // Railway provides REDIS_URL; individual vars are used for local dev
   REDIS_URL: Joi.string().optional().allow(''),

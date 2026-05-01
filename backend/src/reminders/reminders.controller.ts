@@ -30,8 +30,16 @@ export class RemindersController {
   }
 
   @Get()
-  findAll(@Request() req: AuthReq) {
-    return this.remindersService.findAllForUser(req.user.id);
+  findAll(
+    @Request() req: AuthReq,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.remindersService.findAllForUser(
+      req.user.id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 100,
+    );
   }
 
   @Get('today')

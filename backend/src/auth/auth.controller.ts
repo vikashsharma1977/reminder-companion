@@ -1,6 +1,6 @@
 import {
   Controller, Post, Get, Body, HttpCode, HttpStatus,
-  UseGuards, Request, Res, Logger, UnauthorizedException,
+  UseGuards, Request, Res, Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
@@ -54,7 +54,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @SkipThrottle()
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
   refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refresh(dto.refreshToken);
   }

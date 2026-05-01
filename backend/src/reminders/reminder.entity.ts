@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../users/user.entity';
 
@@ -30,11 +31,14 @@ export enum RecurrenceType {
   CUSTOM = 'custom',
 }
 
+@Index(['userId', 'status'])
+@Index(['userId', 'scheduledAt'])
 @Entity('reminders')
 export class Reminder {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index()
   @Column()
   userId: string;
 

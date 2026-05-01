@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, MoreThan } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import * as crypto from 'crypto';
 import { OtpEntity } from './otp.entity';
 
 const MAX_ATTEMPTS = 5;
@@ -26,6 +27,10 @@ export class OtpService {
 
   private generateCode(): string {
     return String(Math.floor(100000 + Math.random() * MAX_CODE)).slice(0, 6);
+  }
+
+  private hashCode(code: string): string {
+    return crypto.createHash('sha256').update(code).digest('hex');
   }
 
   async sendPasswordResetOtp(email: string): Promise<void> {
@@ -71,7 +76,7 @@ export class OtpService {
 
     const code = this.generateCode();
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
-    await this.otpRepo.save(this.otpRepo.create({ target, type, code, expiresAt }));
+    await this.otpRepo.save(this.otpRepo.create({ target, type, codeHash: this.hashCode(code), expiresAt }));
     return code;
   }
 
@@ -90,7 +95,7 @@ export class OtpService {
       throw new ForbiddenException('Too many incorrect attempts. Request a new code.');
     }
 
-    if (otp.code !== code) {
+    if (otp.codeHash !== this.hashCode(code)) {
       otp.attempts += 1;
       await this.otpRepo.save(otp);
       const remaining = MAX_ATTEMPTS - otp.attempts;

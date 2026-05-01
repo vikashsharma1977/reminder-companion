@@ -14,8 +14,9 @@ export class OtpEntity {
   @Column({ type: 'varchar' })
   type: 'email' | 'phone' | 'password-reset';
 
-  @Column()
-  code: string;
+  // Stores SHA-256 hash of the plaintext code — never the raw digits
+  @Column({ name: 'code' })
+  codeHash: string;
 
   @Column()
   expiresAt: Date;

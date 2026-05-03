@@ -18,10 +18,10 @@ const SOUND_FILES: Record<string, any> = {
 };
 
 const VIBRATION_PATTERNS: Record<string, number[]> = {
-  chime:  [0, 600, 150, 600, 150, 600, 150, 600],   // ~3s
-  bell:   [0, 600, 200, 600, 200, 600, 200, 600],   // ~3s
-  gentle: [0, 700, 300, 700, 300, 700],             // ~3s
-  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~3s
+  chime:  [0, 600, 150, 600, 150, 600, 150, 600, 150, 600],                          // ~4s
+  bell:   [0, 600, 200, 600, 200, 600, 200, 600, 200, 600],                          // ~4s
+  gentle: [0, 700, 300, 700, 300, 700, 300, 700],                                    // ~4s
+  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~4s
   none:   [],
 };
 
@@ -67,11 +67,11 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
             SOUND_FILES[sound],
             { shouldPlay: true, volume: 1.0, isLooping: true },
           );
-          // Stop looping after 3s, then unload
+          // Stop looping after 4s, then unload
           setTimeout(async () => {
             try { await s.setIsLoopingAsync(false); } catch {}
             setTimeout(() => s.unloadAsync().catch(() => {}), 2000);
-          }, 3000);
+          }, 4000);
         } catch {}
       })();
     }

@@ -60,11 +60,11 @@ function AppShell() {
         // reminders_v4: use explicit 'chime' file instead of 'default' — some ROMs
         // resolve sound:'default' as no sound, so we reference the compiled-in file.
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('reminders_v5', {
+          await Notifications.setNotificationChannelAsync('reminders_v6', {
             name: 'Reminders',
             importance: Notifications.AndroidImportance.MAX,
             sound: 'chime',
-            vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600],
+            vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600, 150, 600],
             lightColor: '#6C5CE7',
             enableLights: true,
             enableVibrate: true,
@@ -76,10 +76,10 @@ function AppShell() {
           Notifications.deleteNotificationChannelAsync('reminders_v2').catch(() => {});
           Notifications.deleteNotificationChannelAsync('reminders_v3').catch(() => {});
           Notifications.deleteNotificationChannelAsync('reminders_v4').catch(() => {});
+          Notifications.deleteNotificationChannelAsync('reminders_v5').catch(() => {});
 
-          // One-time migration: reschedule all existing notifications onto reminders_v5.
-          // New key ensures this runs on every device regardless of prior migration state.
-          SecureStore.getItemAsync('notif_v5_migrated').then(async (done) => {
+          // One-time migration: reschedule all existing notifications onto reminders_v6.
+          SecureStore.getItemAsync('notif_v6_migrated').then(async (done) => {
             if (done) return;
             try {
               const list = await Notifications.getAllScheduledNotificationsAsync();
@@ -94,7 +94,7 @@ function AppShell() {
                     body: n.content.body ?? '',
                     sound: true,
                     data: (n.content.data as any) ?? {},
-                    channelId: 'reminders_v5',
+                    channelId: 'reminders_v6',
                   },
                   trigger: {
                     type: Notifications.SchedulableTriggerInputTypes.DATE,
@@ -103,7 +103,7 @@ function AppShell() {
                 });
               }
             } catch {}
-            SecureStore.setItemAsync('notif_v5_migrated', '1').catch(() => {});
+            SecureStore.setItemAsync('notif_v6_migrated', '1').catch(() => {});
           }).catch(() => {});
         }
 

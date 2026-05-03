@@ -21,11 +21,10 @@ Notifications.setNotificationHandler({
     const inForeground = AppState.currentState === 'active';
     return {
       shouldShowAlert: true,
-      // Always play sound — channel sound/vibration must never be suppressed.
-      // On Android, the channel controls the actual audio; returning false here
-      // silences it even when the channel has sound configured.
-      // In the foreground the modal provides the visual UX; one system sound is fine.
-      shouldPlaySound: true,
+      // In foreground: modal plays sound via expo-av; suppress OS sound to avoid
+      // audio-focus conflict (two audio sessions fighting causes one to drop out).
+      // In background: OS channel sound plays since expo-av can't run.
+      shouldPlaySound: !inForeground,
       shouldSetBadge: true,
       shouldShowBanner: !inForeground, // foreground: modal; background: OS heads-up banner
       shouldShowList: true,

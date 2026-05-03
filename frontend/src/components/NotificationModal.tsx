@@ -18,10 +18,10 @@ const SOUND_FILES: Record<string, any> = {
 };
 
 const VIBRATION_PATTERNS: Record<string, number[]> = {
-  chime:  [0, 600, 150, 600, 150, 600, 150, 600, 150, 600],                          // ~4s
-  bell:   [0, 600, 200, 600, 200, 600, 200, 600, 200, 600],                          // ~4s
-  gentle: [0, 700, 300, 700, 300, 700, 300, 700],                                    // ~4s
-  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~4s
+  chime:  [0, 600, 150, 600, 150, 600, 150, 600, 150, 600, 150, 600, 150, 600],      // ~6s
+  bell:   [0, 600, 200, 600, 200, 600, 200, 600, 200, 600, 200, 600, 200, 600],      // ~6s
+  gentle: [0, 700, 300, 700, 300, 700, 300, 700, 300, 700, 300, 700],                // ~6s
+  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~6s
   none:   [],
 };
 
@@ -56,6 +56,7 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
     }
 
     if (prefs.sound && sound !== 'none' && Audio && SOUND_FILES[sound]) {
+      const vol = prefs.volume ?? 1.0;
       (async () => {
         try {
           await Audio.setAudioModeAsync({
@@ -65,14 +66,16 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
           });
           const { sound: s } = await Audio.Sound.createAsync(
             SOUND_FILES[sound],
-            { shouldPlay: true, volume: 1.0, isLooping: true },
+            { shouldPlay: true, volume: vol, isLooping: true },
           );
-          // Stop looping after 4s, then unload
+          // Stop looping after 6s, then unload
           setTimeout(async () => {
             try { await s.setIsLoopingAsync(false); } catch {}
             setTimeout(() => s.unloadAsync().catch(() => {}), 2000);
-          }, 4000);
-        } catch {}
+          }, 6000);
+        } catch (e) {
+          console.warn('[NotificationModal] sound playback failed:', e);
+        }
       })();
     }
   }, [reminder?.reminderId]);

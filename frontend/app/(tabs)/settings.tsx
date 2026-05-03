@@ -316,6 +316,34 @@ export default function SettingsScreen() {
             />
           </View>
 
+          {/* Volume control */}
+          {prefs.sound && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.row}>
+                <View style={styles.rowIcon}><Ionicons name="volume-high-outline" size={16} color="#6C5CE7" /></View>
+                <View style={styles.rowContent}><Text style={styles.rowLabel}>Volume</Text></View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <TouchableOpacity
+                    onPress={() => setGlobal({ volume: Math.max(0.1, Math.round(((prefs.volume ?? 1.0) - 0.1) * 10) / 10) })}
+                    disabled={(prefs.volume ?? 1.0) <= 0.1}
+                    style={[styles.volBtn, (prefs.volume ?? 1.0) <= 0.1 && styles.volBtnDisabled]}
+                  >
+                    <Ionicons name="remove" size={16} color={(prefs.volume ?? 1.0) <= 0.1 ? '#C4C6D4' : '#6C5CE7'} />
+                  </TouchableOpacity>
+                  <Text style={styles.volValue}>{Math.round((prefs.volume ?? 1.0) * 100)}%</Text>
+                  <TouchableOpacity
+                    onPress={() => setGlobal({ volume: Math.min(1.0, Math.round(((prefs.volume ?? 1.0) + 0.1) * 10) / 10) })}
+                    disabled={(prefs.volume ?? 1.0) >= 1.0}
+                    style={[styles.volBtn, (prefs.volume ?? 1.0) >= 1.0 && styles.volBtnDisabled]}
+                  >
+                    <Ionicons name="add" size={16} color={(prefs.volume ?? 1.0) >= 1.0 ? '#C4C6D4' : '#6C5CE7'} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </>
+          )}
+
           {/* Default sound picker */}
           {prefs.sound && (
             <>
@@ -526,4 +554,7 @@ const styles = StyleSheet.create({
   overrideLabel: { flex: 1, fontSize: 13, color: '#4B5563', fontWeight: '500' },
   resetBtn: { backgroundColor: '#FEF2F2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginRight: 6 },
   resetBtnText: { fontSize: 11, color: '#EF4444', fontWeight: '700' },
+  volBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: '#E9E7FD', alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  volBtnDisabled: { borderColor: '#F0EFF8', backgroundColor: '#F8F7FF' },
+  volValue: { fontSize: 13, fontWeight: '700', color: '#6C5CE7', minWidth: 40, textAlign: 'center' },
 });

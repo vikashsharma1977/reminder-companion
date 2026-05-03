@@ -64,8 +64,7 @@ export class NotificationsService {
         priority: 'high',
         channelId: 'reminders_v6',
         badge: payload.badge ?? 1,
-        // Android: keep notification visible until user explicitly dismisses
-        sticky: false,
+        sticky: true,  // survives "clear all"; user can still individually swipe away
         ttl: 3600,
       }),
     });

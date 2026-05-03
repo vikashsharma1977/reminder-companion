@@ -77,6 +77,13 @@ export class RemindersProcessor {
 
       this.logger.log(`Fired reminder "${reminder.title}" for user ${reminder.userId}`);
 
+      // Schedule first nudge: if not acted on in 10 min, re-alert up to 3 times
+      await this.reminderQueue.add(
+        'nudge',
+        { reminderId: reminder.id, attempt: 1 },
+        { delay: 10 * 60 * 1000 },
+      );
+
       // Schedule next occurrence for recurring reminders
       await this.scheduleNextOccurrence(reminder);
     } catch (err) {
@@ -120,6 +127,41 @@ export class RemindersProcessor {
     if (delay > 0) {
       await this.reminderQueue.add('fire', { reminderId: reminder.id }, { delay });
       this.logger.log(`Scheduled next occurrence for "${reminder.title}" at ${nextAt.toISOString()}`);
+    }
+  }
+
+  @Process('nudge')
+  async handleNudge(job: Job<{ reminderId: string; attempt: number }>) {
+    const { reminderId, attempt } = job.data;
+    try {
+      const reminder = await this.reminderRepo.findOne({ where: { id: reminderId } });
+
+      // Stop if completed, snoozed (lastFiredAt cleared), or fired too long ago
+      if (!reminder || reminder.status !== ReminderStatus.ACTIVE) return;
+      if (!reminder.lastFiredAt) return; // snoozed — lastFiredAt was cleared
+      const age = Date.now() - reminder.lastFiredAt.getTime();
+      if (age > 40 * 60 * 1000) return; // reminder fired >40 min ago — stop nudging
+
+      const user = await this.usersService.findById(reminder.userId);
+      if (user?.fcmToken) {
+        await this.notificationsService.sendPush(user.fcmToken, {
+          title: `Still pending: ${reminder.title}`,
+          body: 'Tap to snooze or mark done.',
+          data: { reminderId: reminder.id, nudge: 'true' },
+        });
+      }
+
+      this.logger.log(`Nudge ${attempt}/3 sent for "${reminder.title}"`);
+
+      if (attempt < 3) {
+        await this.reminderQueue.add(
+          'nudge',
+          { reminderId, attempt: attempt + 1 },
+          { delay: 10 * 60 * 1000 },
+        );
+      }
+    } catch (err) {
+      this.logger.error(`Nudge failed for reminder ${reminderId}: ${err}`);
     }
   }
 

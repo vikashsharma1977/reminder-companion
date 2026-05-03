@@ -82,26 +82,20 @@ function AppShell() {
           SecureStore.getItemAsync('notif_v6_migrated').then(async (done) => {
             if (done) return;
             try {
+              const now = Date.now();
               const list = await Notifications.getAllScheduledNotificationsAsync();
-              for (const n of list) {
-                const t = n.trigger as any;
-                const ms: number | null = t?.value ?? t?.timestamp ?? null;
-                if (!ms || ms <= Date.now()) continue;
-                await Notifications.scheduleNotificationAsync({
-                  identifier: n.identifier,
-                  content: {
-                    title: n.content.title ?? '',
-                    body: n.content.body ?? '',
-                    sound: true,
-                    data: (n.content.data as any) ?? {},
-                    channelId: 'reminders_v6',
-                  },
-                  trigger: {
-                    type: Notifications.SchedulableTriggerInputTypes.DATE,
-                    date: new Date(ms),
-                  },
-                });
-              }
+              await Promise.all(
+                list
+                  .filter(n => { const t = n.trigger as any; const ms = t?.value ?? t?.timestamp; return ms && ms > now; })
+                  .map(n => {
+                    const t = n.trigger as any;
+                    return Notifications.scheduleNotificationAsync({
+                      identifier: n.identifier,
+                      content: { title: n.content.title ?? '', body: n.content.body ?? '', sound: true, data: (n.content.data as any) ?? {}, channelId: 'reminders_v6' },
+                      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(t?.value ?? t?.timestamp) },
+                    });
+                  }),
+              );
             } catch {}
             SecureStore.setItemAsync('notif_v6_migrated', '1').catch(() => {});
           }).catch(() => {});

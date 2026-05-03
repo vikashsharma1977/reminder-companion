@@ -6,6 +6,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { usersApi } from '../../src/api/client';
 import { useAlertPrefs, SOUND_OPTIONS, AlertCategory, AlertSound } from '../../src/hooks/useAlertPrefs';
+import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -420,7 +422,15 @@ export default function SettingsScreen() {
         {/* App */}
         <SectionLabel label="APP INFO" />
         <View style={styles.card}>
-          <SettingsRow icon="code-slash-outline" label="Version" value="1.0.0 (MVP)" />
+          <SettingsRow
+            icon="code-slash-outline"
+            label="Version"
+            value={(() => {
+              const native = Constants.expoConfig?.version ?? '—';
+              const otaId = Updates.updateId ? Updates.updateId.slice(0, 8) : 'dev';
+              return `${native} · OTA: ${otaId}`;
+            })()}
+          />
           <View style={styles.divider} />
           <SettingsRow icon="server-outline" label="Backend" value="railway.app" />
         </View>

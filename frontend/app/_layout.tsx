@@ -20,13 +20,15 @@ Notifications.setNotificationHandler({
   handleNotification: async () => {
     const inForeground = AppState.currentState === 'active';
     return {
-      shouldShowAlert: true,
-      // In foreground: modal plays sound via expo-av; suppress OS sound to avoid
-      // audio-focus conflict (two audio sessions fighting causes one to drop out).
-      // In background: OS channel sound plays since expo-av can't run.
+      // Foreground: modal handles 100% of UX (sound + vibration via JS).
+      // Suppress all system presentation so the channel doesn't vibrate
+      // briefly and conflict with the modal's Vibration.vibrate() call.
+      // Background: OS handles everything via the channel.
+      shouldShowAlert: !inForeground,
       shouldPlaySound: !inForeground,
       shouldSetBadge: true,
-      shouldShowBanner: !inForeground, // foreground: modal; background: OS heads-up banner
+      shouldShowBanner: !inForeground,
+      shouldShowList: !inForeground,
       shouldShowList: true,
     };
   },
@@ -181,11 +183,28 @@ function AppShell() {
     return () => sub.remove();
   }, []);
 
-  // Handle notification taps (from lock screen / notification shade).
-  // Show the snooze modal exactly as if the reminder just fired in-app.
+  // Show modal immediately when a notification arrives while the app is open.
+  // addNotificationReceivedListener fires as soon as the notification is delivered
+  // to the app — no polling delay. The system presentation is fully suppressed in
+  // foreground (handler above), so the modal is the only UX.
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as any;
+      const reminderId: string = data?.reminderId;
+      if (!reminderId) return;
+      const content = notification.request.content;
+      setActiveReminder({
+        reminderId,
+        title: content.title ?? '',
+        scheduledAt: null,
+        notes: typeof content.body === 'string' &&
+               content.body !== 'Time for your reminder!'
+               ? content.body : undefined,
+      });
+    });
+    // Also handle notification taps (from lock screen / notification shade).
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response.notification.request.content.data as any;
       const reminderId: string = data?.reminderId;
       if (!reminderId) return;
@@ -199,7 +218,7 @@ function AppShell() {
                ? content.body : undefined,
       });
     });
-    return () => sub.remove();
+    return () => { receivedSub.remove(); responseSub.remove(); };
   }, []);
 
   useNotifications((reminder) => {

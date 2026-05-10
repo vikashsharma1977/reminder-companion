@@ -17,13 +17,6 @@ const SOUND_FILES: Record<string, any> = {
   urgent: require('../../assets/sounds/urgent.wav'),
 };
 
-const VIBRATION_PATTERNS: Record<string, number[]> = {
-  chime:  [0, 600, 150, 600, 150, 600, 150, 600, 150, 600, 150, 600, 150, 600],      // ~6s
-  bell:   [0, 600, 200, 600, 200, 600, 200, 600, 200, 600, 200, 600, 200, 600],      // ~6s
-  gentle: [0, 700, 300, 700, 300, 700, 300, 700, 300, 700, 300, 700],                // ~6s
-  urgent: [0, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300, 100, 300], // ~6s
-  none:   [],
-};
 
 interface Props {
   reminder: FiredReminder | null;
@@ -50,9 +43,12 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
 
     const sound = prefs.defaultSound;
 
+    const durationMs = (prefs.alertDuration ?? 4) * 1000;
+
+    // Simple duration vibration is reliable on all Android OEMs.
+    // Pattern arrays (alternating on/off) are ignored by some devices.
     if (Platform.OS !== 'web' && prefs.vibration && sound !== 'none') {
-      const pattern = VIBRATION_PATTERNS[sound] ?? VIBRATION_PATTERNS.chime;
-      if (pattern.length > 0) Vibration.vibrate(pattern);
+      Vibration.vibrate(durationMs);
     }
 
     if (prefs.sound && sound !== 'none' && Audio && SOUND_FILES[sound]) {
@@ -68,11 +64,10 @@ export function NotificationModal({ reminder, onDismiss }: Props) {
             SOUND_FILES[sound],
             { shouldPlay: true, volume: vol, isLooping: true },
           );
-          // Stop looping after 6s, then unload
           setTimeout(async () => {
             try { await s.setIsLoopingAsync(false); } catch {}
             setTimeout(() => s.unloadAsync().catch(() => {}), 2000);
-          }, 6000);
+          }, durationMs);
         } catch (e) {
           console.warn('[NotificationModal] sound playback failed:', e);
         }

@@ -7,7 +7,8 @@ export type AlertCategory = 'health' | 'work' | 'personal' | 'other' | 'default'
 export interface AlertPrefs {
   vibration: boolean;
   sound: boolean;
-  volume: number; // 0.1 – 1.0
+  volume: number;       // 0.1 – 1.0
+  alertDuration: number; // seconds: 2 | 4 | 6 | 8 | 10
   categoryOverrides: Partial<Record<AlertCategory, { sound: AlertSound; vibration: boolean }>>;
   defaultSound: AlertSound;
 }
@@ -24,6 +25,7 @@ const DEFAULT_PREFS: AlertPrefs = {
   vibration: true,
   sound: true,
   volume: 1.0,
+  alertDuration: 4,
   defaultSound: 'chime',
   categoryOverrides: {},
 };
@@ -48,7 +50,7 @@ export function useAlertPrefs() {
     await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   }, []);
 
-  const setGlobal = useCallback((patch: Partial<Pick<AlertPrefs, 'vibration' | 'sound' | 'volume' | 'defaultSound'>>) => {
+  const setGlobal = useCallback((patch: Partial<Pick<AlertPrefs, 'vibration' | 'sound' | 'volume' | 'alertDuration' | 'defaultSound'>>) => {
     save({ ...prefs, ...patch });
   }, [prefs, save]);
 

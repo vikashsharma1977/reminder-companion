@@ -344,6 +344,33 @@ export default function SettingsScreen() {
             </>
           )}
 
+          {/* Alert duration control */}
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <View style={styles.rowIcon}><Ionicons name="timer-outline" size={16} color="#6C5CE7" /></View>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowLabel}>Alert Duration</Text>
+              <Text style={styles.rowSubLabel}>Sound &amp; vibration length</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <TouchableOpacity
+                onPress={() => setGlobal({ alertDuration: Math.max(2, (prefs.alertDuration ?? 4) - 2) })}
+                disabled={(prefs.alertDuration ?? 4) <= 2}
+                style={[styles.volBtn, (prefs.alertDuration ?? 4) <= 2 && styles.volBtnDisabled]}
+              >
+                <Ionicons name="remove" size={16} color={(prefs.alertDuration ?? 4) <= 2 ? '#C4C6D4' : '#6C5CE7'} />
+              </TouchableOpacity>
+              <Text style={styles.volValue}>{prefs.alertDuration ?? 4}s</Text>
+              <TouchableOpacity
+                onPress={() => setGlobal({ alertDuration: Math.min(10, (prefs.alertDuration ?? 4) + 2) })}
+                disabled={(prefs.alertDuration ?? 4) >= 10}
+                style={[styles.volBtn, (prefs.alertDuration ?? 4) >= 10 && styles.volBtnDisabled]}
+              >
+                <Ionicons name="add" size={16} color={(prefs.alertDuration ?? 4) >= 10 ? '#C4C6D4' : '#6C5CE7'} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Default sound picker */}
           {prefs.sound && (
             <>

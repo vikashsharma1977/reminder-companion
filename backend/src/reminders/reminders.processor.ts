@@ -6,7 +6,6 @@ import { Repository } from 'typeorm';
 import { Reminder, ReminderStatus, RecurrenceType } from './reminder.entity';
 import { EventBusService } from '../notifications/event-bus.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { UsersService } from '../users/users.service';
 
 @Processor('reminders')
 export class RemindersProcessor {
@@ -19,7 +18,6 @@ export class RemindersProcessor {
     private readonly reminderQueue: Queue,
     private readonly eventBus: EventBusService,
     private readonly notificationsService: NotificationsService,
-    private readonly usersService: UsersService,
   ) {}
 
   @Process('fire')
@@ -50,30 +48,11 @@ export class RemindersProcessor {
         notes: reminder.notes ?? undefined,
       });
 
-      // Send push notification to mobile device
-      try {
-        const user = await this.usersService.findById(reminder.userId);
-        if (user?.fcmToken) {
-          // Badge = number of active reminders for today (so user knows how many remain)
-          const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-          const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
-          const pendingCount = await this.reminderRepo
-            .createQueryBuilder('r')
-            .where('r.userId = :userId', { userId: reminder.userId })
-            .andWhere('r.status = :status', { status: ReminderStatus.ACTIVE })
-            .andWhere('(r.scheduledAt BETWEEN :start AND :end OR r.scheduledAt IS NULL)', { start: todayStart, end: todayEnd })
-            .getCount();
-
-          await this.notificationsService.sendPush(user.fcmToken, {
-            title: reminder.title,
-            body: reminder.notes ?? 'Time for your reminder!',
-            data: { reminderId: reminder.id },
-            badge: pendingCount,
-          });
-        }
-      } catch (err: any) {
-        this.logger.warn(`Push notification failed for reminder ${reminderId}: ${err?.message}`);
-      }
+      // Push intentionally skipped for the fire event: the app schedules a local
+      // notification on-device at the exact fire time, so push would arrive 1-3s
+      // later and interrupt the channel vibration mid-pattern (causing the "1s"
+      // vibration bug). Local notifications work even when the app is killed.
+      // Push is kept only for digests/suggestions that have no local counterpart.
 
       this.logger.log(`Fired reminder "${reminder.title}" for user ${reminder.userId}`);
 
@@ -142,16 +121,11 @@ export class RemindersProcessor {
       const age = Date.now() - reminder.lastFiredAt.getTime();
       if (age > 40 * 60 * 1000) return; // reminder fired >40 min ago — stop nudging
 
-      const user = await this.usersService.findById(reminder.userId);
-      if (user?.fcmToken) {
-        await this.notificationsService.sendPush(user.fcmToken, {
-          title: `Still pending: ${reminder.title}`,
-          body: 'Tap to snooze or mark done.',
-          data: { reminderId: reminder.id, nudge: 'true' },
-        });
-      }
+      // Push skipped — local nudge notifications are already scheduled on-device
+      // (via syncLocalNotifications). A server push would cause a second vibration
+      // interrupting the first, resulting in the same "1s" bug as the fire event.
 
-      this.logger.log(`Nudge ${attempt}/3 sent for "${reminder.title}"`);
+      this.logger.log(`Nudge ${attempt}/3 for "${reminder.title}" (local notification handles alert)`);
 
       if (attempt < 3) {
         await this.reminderQueue.add(

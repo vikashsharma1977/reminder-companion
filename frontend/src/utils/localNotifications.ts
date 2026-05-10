@@ -1,11 +1,36 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
-const CHANNEL = 'reminders_v6';
+export const ALERT_DURATIONS = [2, 4, 6, 8, 10] as const;
 const NUDGE_DELAYS_MIN = [10, 20, 30];
-// Only schedule nudges for reminders firing within this window.
-// Reminders further out get nudges scheduled on the next foreground sync.
 const NUDGE_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+export function channelIdForDuration(seconds: number): string {
+  return `reminders_dur_${seconds}s`;
+}
+
+// Generates a [0, on, off, on, ...] pattern that vibrates for ~seconds total.
+export function vibPatternForDuration(seconds: number): number[] {
+  const pattern: number[] = [0];
+  const pulses = Math.round((seconds * 1000) / 750); // 600ms on + 150ms off
+  for (let i = 0; i < pulses; i++) {
+    pattern.push(600);
+    if (i < pulses - 1) pattern.push(150);
+  }
+  return pattern;
+}
+
+// Reads alertDuration from persisted prefs and returns the matching channel ID.
+export async function getActiveChannelId(): Promise<string> {
+  try {
+    const raw = await AsyncStorage.getItem('alert_prefs');
+    const dur: number = raw ? (JSON.parse(raw).alertDuration ?? 4) : 4;
+    return channelIdForDuration(dur);
+  } catch {
+    return channelIdForDuration(4);
+  }
+}
 
 function notifId(reminderId: string) {
   return `reminder_${reminderId}`;
@@ -15,11 +40,11 @@ function nudgeId(reminderId: string, attempt: number) {
   return `reminder_${reminderId}_nudge_${attempt}`;
 }
 
-function baseContent(reminderId: string) {
+function baseContent(reminderId: string, channelId: string) {
   return {
     sound: true,
     data: { reminderId },
-    ...(Platform.OS === 'android' && { channelId: CHANNEL, sticky: true }),
+    ...(Platform.OS === 'android' && { channelId, sticky: true }),
   };
 }
 
@@ -37,7 +62,8 @@ export async function scheduleLocalReminder(reminder: {
 
   await cancelLocalReminder(reminder.id);
 
-  const base = baseContent(reminder.id);
+  const channelId = await getActiveChannelId();
+  const base = baseContent(reminder.id, channelId);
   const promises: Promise<string>[] = [
     Notifications.scheduleNotificationAsync({
       identifier: notifId(reminder.id),
@@ -85,6 +111,7 @@ export async function syncLocalNotifications(reminders: Array<{
 
   await Notifications.cancelAllScheduledNotificationsAsync();
 
+  const channelId = await getActiveChannelId();
   const now = new Date();
   const promises: Promise<string>[] = [];
 
@@ -93,7 +120,7 @@ export async function syncLocalNotifications(reminders: Array<{
     const fireAt = new Date(r.scheduledAt);
     if (fireAt <= now) continue;
 
-    const base = baseContent(r.id);
+    const base = baseContent(r.id, channelId);
 
     promises.push(
       Notifications.scheduleNotificationAsync({

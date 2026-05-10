@@ -9,7 +9,7 @@ import * as IntentLauncher from 'expo-intent-launcher';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
-import { syncLocalNotifications } from '../src/utils/localNotifications';
+import { syncLocalNotifications, ALERT_DURATIONS, channelIdForDuration, vibPatternForDuration } from '../src/utils/localNotifications';
 
 // setNotificationHandler is called whenever a notification arrives while the
 // app process is alive — including when the app is in the background (user on
@@ -61,45 +61,28 @@ function AppShell() {
         // reminders_v4: use explicit 'chime' file instead of 'default' — some ROMs
         // resolve sound:'default' as no sound, so we reference the compiled-in file.
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('reminders_v6', {
-            name: 'Reminders',
-            importance: Notifications.AndroidImportance.MAX,
-            sound: 'chime',
-            vibrationPattern: [0, 600, 150, 600, 150, 600, 150, 600, 150, 600],
-            lightColor: '#6C5CE7',
-            enableLights: true,
-            enableVibrate: true,
-            showBadge: true,
-            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-          });
-          // Silently remove old channels (best-effort)
-          Notifications.deleteNotificationChannelAsync('reminders').catch(() => {});
-          Notifications.deleteNotificationChannelAsync('reminders_v2').catch(() => {});
-          Notifications.deleteNotificationChannelAsync('reminders_v3').catch(() => {});
-          Notifications.deleteNotificationChannelAsync('reminders_v4').catch(() => {});
-          Notifications.deleteNotificationChannelAsync('reminders_v5').catch(() => {});
-
-          // One-time migration: reschedule all existing notifications onto reminders_v6.
-          SecureStore.getItemAsync('notif_v6_migrated').then(async (done) => {
-            if (done) return;
-            try {
-              const now = Date.now();
-              const list = await Notifications.getAllScheduledNotificationsAsync();
-              await Promise.all(
-                list
-                  .filter(n => { const t = n.trigger as any; const ms = t?.value ?? t?.timestamp; return ms && ms > now; })
-                  .map(n => {
-                    const t = n.trigger as any;
-                    return Notifications.scheduleNotificationAsync({
-                      identifier: n.identifier,
-                      content: { title: n.content.title ?? '', body: n.content.body ?? '', sound: true, data: (n.content.data as any) ?? {}, channelId: 'reminders_v6' },
-                      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: new Date(t?.value ?? t?.timestamp) },
-                    });
-                  }),
-              );
-            } catch {}
-            SecureStore.setItemAsync('notif_v6_migrated', '1').catch(() => {});
-          }).catch(() => {});
+          // Create one channel per duration option so vibration length matches
+          // the user's alertDuration setting. Android locks channel settings
+          // after first creation, so each duration gets its own fixed channel ID.
+          await Promise.all(
+            ALERT_DURATIONS.map(dur =>
+              Notifications.setNotificationChannelAsync(channelIdForDuration(dur), {
+                name: `Reminders (${dur}s)`,
+                importance: Notifications.AndroidImportance.MAX,
+                sound: 'chime',
+                vibrationPattern: vibPatternForDuration(dur),
+                lightColor: '#6C5CE7',
+                enableLights: true,
+                enableVibrate: true,
+                showBadge: true,
+                lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+              }),
+            ),
+          );
+          // Clean up all old versioned channels
+          ['reminders', 'reminders_v2', 'reminders_v3', 'reminders_v4', 'reminders_v5', 'reminders_v6'].forEach(id =>
+            Notifications.deleteNotificationChannelAsync(id).catch(() => {}),
+          );
         }
 
         const { status: existing } = await Notifications.getPermissionsAsync();

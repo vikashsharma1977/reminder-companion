@@ -8,6 +8,8 @@ import { usersApi } from '../../src/api/client';
 import { useAlertPrefs, SOUND_OPTIONS, AlertCategory, AlertSound } from '../../src/hooks/useAlertPrefs';
 import Constants from 'expo-constants';
 import * as Updates from 'expo-updates';
+import { remindersApi } from '../../src/api/client';
+import { syncLocalNotifications } from '../../src/utils/localNotifications';
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -354,7 +356,11 @@ export default function SettingsScreen() {
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <TouchableOpacity
-                onPress={() => setGlobal({ alertDuration: Math.max(2, (prefs.alertDuration ?? 4) - 2) })}
+                onPress={() => {
+                  const next = Math.max(2, (prefs.alertDuration ?? 4) - 2);
+                  setGlobal({ alertDuration: next });
+                  remindersApi.getAll().then(({ data }) => syncLocalNotifications(data)).catch(() => {});
+                }}
                 disabled={(prefs.alertDuration ?? 4) <= 2}
                 style={[styles.volBtn, (prefs.alertDuration ?? 4) <= 2 && styles.volBtnDisabled]}
               >
@@ -362,7 +368,11 @@ export default function SettingsScreen() {
               </TouchableOpacity>
               <Text style={styles.volValue}>{prefs.alertDuration ?? 4}s</Text>
               <TouchableOpacity
-                onPress={() => setGlobal({ alertDuration: Math.min(10, (prefs.alertDuration ?? 4) + 2) })}
+                onPress={() => {
+                  const next = Math.min(10, (prefs.alertDuration ?? 4) + 2);
+                  setGlobal({ alertDuration: next });
+                  remindersApi.getAll().then(({ data }) => syncLocalNotifications(data)).catch(() => {});
+                }}
                 disabled={(prefs.alertDuration ?? 4) >= 10}
                 style={[styles.volBtn, (prefs.alertDuration ?? 4) >= 10 && styles.volBtnDisabled]}
               >

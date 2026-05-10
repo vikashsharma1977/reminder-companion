@@ -6,32 +6,22 @@ import { View, Platform, AppState, Alert } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as SecureStore from 'expo-secure-store';
 import * as IntentLauncher from 'expo-intent-launcher';
+import notifee, { EventType } from '@notifee/react-native';
 import { useNotifications, FiredReminder } from '../src/hooks/useNotifications';
 import { NotificationModal } from '../src/components/NotificationModal';
 import { notificationsApi, tokenStore, remindersApi } from '../src/api/client';
-import { syncLocalNotifications, ALERT_DURATIONS, channelIdForDuration, vibPatternForDuration } from '../src/utils/localNotifications';
+import { syncLocalNotifications, setupNotifeeChannels } from '../src/utils/localNotifications';
 
-// setNotificationHandler is called whenever a notification arrives while the
-// app process is alive — including when the app is in the background (user on
-// another app or phone locked). We must return shouldShowBanner:true in that
-// case so Android shows the heads-up banner. Only suppress it when the app is
-// actually in the foreground, where our own NotificationModal handles the UX.
+// Suppress expo-notifications presentation in foreground — notifee handles all
+// local notifications now. This handler only affects any residual server pushes.
 Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    const inForeground = AppState.currentState === 'active';
-    return {
-      // Foreground: modal handles 100% of UX (sound + vibration via JS).
-      // Suppress all system presentation so the channel doesn't vibrate
-      // briefly and conflict with the modal's Vibration.vibrate() call.
-      // Background: OS handles everything via the channel.
-      shouldShowAlert: !inForeground,
-      shouldPlaySound: !inForeground,
-      shouldSetBadge: true,
-      shouldShowBanner: !inForeground,
-      shouldShowList: !inForeground,
-      shouldShowList: true,
-    };
-  },
+  handleNotification: async () => ({
+    shouldShowAlert: false,
+    shouldPlaySound: false,
+    shouldSetBadge: true,
+    shouldShowBanner: false,
+    shouldShowList: false,
+  }),
 });
 
 const queryClient = new QueryClient({
@@ -39,6 +29,19 @@ const queryClient = new QueryClient({
     queries: { retry: 2, staleTime: 1000 * 60 },
   },
 });
+
+function reminderFromNotifee(notification: any): FiredReminder | null {
+  const reminderId = notification?.data?.reminderId;
+  if (!reminderId) return null;
+  return {
+    reminderId: String(reminderId),
+    title: notification.title ?? '',
+    scheduledAt: null,
+    notes: typeof notification.body === 'string' &&
+           notification.body !== 'Time for your reminder!'
+           ? notification.body : undefined,
+  };
+}
 
 function AppShell() {
   const [activeReminder, setActiveReminder] = useState<FiredReminder | null>(null);
@@ -50,41 +53,19 @@ function AppShell() {
     }
   }, []);
 
-  // Native: set up notification channel, register push token, clear badge on foreground
+  // Native setup: notifee channels, permissions, push token, foreground sync
   useEffect(() => {
     if (Platform.OS === 'web') return;
     (async () => {
       try {
-        // Android: use a versioned channel ID so that sound/vibration settings
-        // are guaranteed correct. Android locks channel settings after first creation,
-        // so bumping the ID is the only safe way to change them.
-        // reminders_v4: use explicit 'chime' file instead of 'default' — some ROMs
-        // resolve sound:'default' as no sound, so we reference the compiled-in file.
+        // Create one notifee channel per alert duration option.
+        // Notifee uses VibrationEffect directly and bypasses OEM channel overrides.
         if (Platform.OS === 'android') {
-          // Create one channel per duration option so vibration length matches
-          // the user's alertDuration setting. Android locks channel settings
-          // after first creation, so each duration gets its own fixed channel ID.
-          await Promise.all(
-            ALERT_DURATIONS.map(dur =>
-              Notifications.setNotificationChannelAsync(channelIdForDuration(dur), {
-                name: `Reminders (${dur}s)`,
-                importance: Notifications.AndroidImportance.MAX,
-                sound: 'chime',
-                vibrationPattern: vibPatternForDuration(dur),
-                lightColor: '#6C5CE7',
-                enableLights: true,
-                enableVibrate: true,
-                showBadge: true,
-                lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-              }),
-            ),
-          );
-          // Clean up all old versioned channels
-          ['reminders', 'reminders_v2', 'reminders_v3', 'reminders_v4', 'reminders_v5', 'reminders_v6'].forEach(id =>
-            Notifications.deleteNotificationChannelAsync(id).catch(() => {}),
-          );
+          await setupNotifeeChannels();
         }
 
+        // Use expo-notifications for permission prompts (notifee's permissions
+        // API is a subset; expo's gives us the full Android 13+ POST_NOTIFICATIONS flow).
         const { status: existing } = await Notifications.getPermissionsAsync();
         let finalStatus = existing;
         if (existing !== 'granted') {
@@ -93,19 +74,16 @@ function AppShell() {
         }
         if (finalStatus !== 'granted') return;
 
-        // Android: one-time setup for reliable background notifications.
-        // Key versioned so fixed builds re-prompt users who saw broken dialogs.
+        // One-time prompt for battery + overlay settings (unchanged)
         if (Platform.OS === 'android') {
           const asked = await SecureStore.getItemAsync('notif_setup_v4');
           if (!asked) {
             await SecureStore.setItemAsync('notif_setup_v4', '1');
-
             const openAppDetail = () =>
               IntentLauncher.startActivityAsync(
                 'android.settings.APPLICATION_DETAILS_SETTINGS',
                 { data: 'package:com.remindercompanion.app' },
               ).catch(() => {});
-
             Alert.alert(
               'Enable background alerts',
               'Two quick steps so reminders fire even when your screen is off:\n\n' +
@@ -117,9 +95,6 @@ function AppShell() {
                 {
                   text: 'Battery Setting',
                   onPress: () =>
-                    // APPLICATION_DETAILS_SETTINGS is universally reliable;
-                    // REQUEST_IGNORE_BATTERY_OPTIMIZATIONS resolves silently
-                    // on unsupported ROMs so the .catch fallback never ran.
                     IntentLauncher.startActivityAsync(
                       'android.settings.APPLICATION_DETAILS_SETTINGS',
                       { data: 'package:com.remindercompanion.app' },
@@ -138,9 +113,9 @@ function AppShell() {
           }
         }
 
+        // Register Expo push token for server-side digest notifications
         const token = await tokenStore.getAccess();
         if (!token) return;
-
         const { data: pushToken } = await Notifications.getExpoPushTokenAsync({
           projectId: 'd7babc87-33c6-4d6d-9a7e-abf74b5a1b9c',
         });
@@ -148,7 +123,7 @@ function AppShell() {
       } catch {}
     })();
 
-    // On foreground: clear badge + re-sync local notifications from server
+    // Foreground sync: clear badge + reschedule local notifications from server
     const syncOnForeground = async () => {
       Notifications.setBadgeCountAsync(0).catch(() => {});
       try {
@@ -162,46 +137,32 @@ function AppShell() {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') syncOnForeground();
     });
-    syncOnForeground(); // also run immediately on mount
+    syncOnForeground();
     return () => sub.remove();
   }, []);
 
-  // Show modal immediately when a notification arrives while the app is open.
-  // addNotificationReceivedListener fires as soon as the notification is delivered
-  // to the app — no polling delay. The system presentation is fully suppressed in
-  // foreground (handler above), so the modal is the only UX.
+  // Notifee: show modal when notification arrives in foreground (app open)
+  // or is pressed (notification shade / lock screen tap).
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as any;
-      const reminderId: string = data?.reminderId;
-      if (!reminderId) return;
-      const content = notification.request.content;
-      setActiveReminder({
-        reminderId,
-        title: content.title ?? '',
-        scheduledAt: null,
-        notes: typeof content.body === 'string' &&
-               content.body !== 'Time for your reminder!'
-               ? content.body : undefined,
-      });
+
+    // Check if the app was launched/foregrounded by a full-screen intent or tap.
+    // This fires when the app loads after being woken by a locked-screen notification.
+    notifee.getInitialNotification().then(initial => {
+      if (!initial) return;
+      const r = reminderFromNotifee(initial.notification);
+      if (r) setActiveReminder(r);
+    }).catch(() => {});
+
+    // Foreground event: notification delivered while app is open, or pressed.
+    const unsubscribe = notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.DELIVERED || type === EventType.PRESS) {
+        const r = reminderFromNotifee(detail.notification);
+        if (r) setActiveReminder(r);
+      }
     });
-    // Also handle notification taps (from lock screen / notification shade).
-    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as any;
-      const reminderId: string = data?.reminderId;
-      if (!reminderId) return;
-      const content = response.notification.request.content;
-      setActiveReminder({
-        reminderId,
-        title: content.title ?? '',
-        scheduledAt: null,
-        notes: typeof content.body === 'string' &&
-               content.body !== 'Time for your reminder!'
-               ? content.body : undefined,
-      });
-    });
-    return () => { receivedSub.remove(); responseSub.remove(); };
+
+    return () => unsubscribe();
   }, []);
 
   useNotifications((reminder) => {
@@ -228,7 +189,6 @@ function AppShell() {
         <Stack.Screen name="auth/reset-password" options={{ title: 'Reset Password', headerBackTitle: 'Back' }} />
         <Stack.Screen name="reminder/new" options={{ title: 'New Reminder', presentation: 'modal' }} />
         <Stack.Screen name="reminder/medicine" options={{ title: 'Medicine Reminder', presentation: 'modal' }} />
-
       </Stack>
 
       <NotificationModal

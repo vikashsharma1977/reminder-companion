@@ -31,6 +31,7 @@ import { envValidationSchema } from './config/env.validation';
           type: 'postgres' as const,
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
+          migrationsRun: true,
           synchronize: config.get('NODE_ENV') !== 'production',
           logging: config.get('NODE_ENV') === 'development',
         };

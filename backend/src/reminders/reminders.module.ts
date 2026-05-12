@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { Reminder } from './reminder.entity';
+import { User } from '../users/user.entity';
 import { RemindersService } from './reminders.service';
 import { RemindersController } from './reminders.controller';
 import { RemindersProcessor } from './reminders.processor';
@@ -10,7 +11,7 @@ import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Reminder]),
+    TypeOrmModule.forFeature([Reminder, User]),
     BullModule.registerQueue({ name: 'reminders' }),
     NotificationsModule,
     UsersModule,

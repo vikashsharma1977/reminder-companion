@@ -4,6 +4,7 @@ import { Job, Queue } from 'bull';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reminder, ReminderStatus, RecurrenceType } from './reminder.entity';
+import { User } from '../users/user.entity';
 import { EventBusService } from '../notifications/event-bus.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -14,6 +15,8 @@ export class RemindersProcessor {
   constructor(
     @InjectRepository(Reminder)
     private readonly reminderRepo: Repository<Reminder>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
     @InjectQueue('reminders')
     private readonly reminderQueue: Queue,
     private readonly eventBus: EventBusService,
@@ -48,11 +51,16 @@ export class RemindersProcessor {
         notes: reminder.notes ?? undefined,
       });
 
-      // Push intentionally skipped for the fire event: the app schedules a local
-      // notification on-device at the exact fire time, so push would arrive 1-3s
-      // later and interrupt the channel vibration mid-pattern (causing the "1s"
-      // vibration bug). Local notifications work even when the app is killed.
-      // Push is kept only for digests/suggestions that have no local counterpart.
+      // Send push notification as fallback delivery path (local notifee triggers
+      // may not fire on all OEM configurations due to battery optimization).
+      const user = await this.userRepo.findOne({ where: { id: reminder.userId } });
+      if (user?.fcmToken) {
+        await this.notificationsService.sendPush(user.fcmToken, {
+          title: reminder.title,
+          body: reminder.notes ?? 'Time for your reminder!',
+          data: { reminderId: reminder.id },
+        }).catch(e => this.logger.warn(`Push failed: ${e}`));
+      }
 
       this.logger.log(`Fired reminder "${reminder.title}" for user ${reminder.userId}`);
 
